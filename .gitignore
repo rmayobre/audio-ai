@@ -1,0 +1,24 @@
+# Any ebook, not just those in books/ (copyrighted, and easy to drop in the wrong folder)
+*.epub
+*.mobi
+*.azw3
+
+# More audio formats the tools or ffmpeg might produce
+*.wav
+*.m4a
+*.ogg
+*.opus
+
+# If you forget --work, the converter makes <book>_chapters/ in whatever folder you ran it from
+*_chapters/
+
+# Local configuration and secrets (keep an .env.example if you add one)
+.env
+.env.*
+!.env.example
+
+# Editor and OS noise (or put these in your global gitignore instead)
+.DS_Store
+.idea/
+.vscode/
+*.swp
