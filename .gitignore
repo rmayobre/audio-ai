@@ -22,3 +22,7 @@
 .idea/
 .vscode/
 *.swp
+
+books/*
+output/*
+glossories/*
