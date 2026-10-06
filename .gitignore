@@ -23,6 +23,8 @@
 .vscode/
 *.swp
 
+# Directories
 books/*
 output/*
 glossaries/*
+*/__pycache__/*
