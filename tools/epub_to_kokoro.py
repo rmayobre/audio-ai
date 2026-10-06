@@ -29,6 +29,10 @@ with new pronunciations.
 
 Requires: pip install ebooklib beautifulsoup4 requests ; ffmpeg + ffprobe on PATH.
 Re-running resumes: chapters whose chapter_XX.flac already exists are skipped.
+
+Logging: every line is timestamped, flushed immediately (safe to redirect to a file or `tail -f`) and also
+appended to <work>/convert.log (change with --log). It reports per-chunk progress, elapsed time, an ETA, how
+often each respelling was applied, retries, ffmpeg failures (full stderr goes to the log) and a final summary.
 """
 import argparse
 import ast
@@ -39,6 +43,7 @@ import re
 import subprocess
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 import requests
@@ -72,9 +77,29 @@ PRONUNCIATIONS = {
 # -------------------------------------------------------------------------
 
 
+LOG_FILE = None
+
+
+def log(msg=""):
+    """Print a timestamped line, flushed right away, and append it to LOG_FILE when one is set."""
+    line = f"{time.strftime('%H:%M:%S')} {msg}" if msg else ""
+    print(line, flush=True)
+    if LOG_FILE:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%Y-%m-%d')} {line}\n")
+
+
+def fmt_secs(sec):
+    sec = int(sec)
+    h, rem = divmod(sec, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}h{m:02d}m" if h else f"{m}m{s:02d}s"
+
+
 def run(cmd):
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
+        log(f"Command failed (exit {r.returncode}): {' '.join(cmd)}\n{r.stderr}")  # full stderr goes to the log
         sys.exit(f"Command failed: {' '.join(cmd)}\n{r.stderr[-1500:]}")
     return r.stdout
 
@@ -154,13 +179,19 @@ def load_pronunciations(path):
     return {w.strip(): s.strip() for w, s in table.items() if w.strip() and s.strip()}
 
 
-def apply_pronunciations(text, table):
-    """Replace each whole word (case-sensitive, longest first) with its pronunciation."""
+def apply_pronunciations(text, table, hits=None):
+    """Replace each whole word (case-sensitive, longest first) with its pronunciation.
+    If `hits` (a Counter) is given, it is incremented for every replacement made."""
     if not table:
         return text
     words = sorted(table, key=len, reverse=True)
     pattern = re.compile(r"\b(?:" + "|".join(re.escape(w) for w in words) + r")\b")
-    return pattern.sub(lambda m: table[m.group(0)], text)
+
+    def sub(m):
+        if hits is not None:
+            hits[m.group(0)] += 1
+        return table[m.group(0)]
+    return pattern.sub(sub, text)
 
 
 def chunk_text(text, limit=CHUNK_CHARS):
@@ -180,7 +211,7 @@ def chunk_text(text, limit=CHUNK_CHARS):
     return chunks
 
 
-def synthesize(url, voice, speed, text, dest, retries=3):
+def synthesize(url, voice, speed, text, dest, retries=3, label="chunk"):
     payload = {"model": "kokoro", "input": text, "voice": voice,
                "response_format": "flac", "speed": speed}
     for attempt in range(1, retries + 1):
@@ -192,10 +223,13 @@ def synthesize(url, voice, speed, text, dest, retries=3):
             err = f"HTTP {r.status_code}: {r.text[:300]}"
         except requests.RequestException as e:
             err = str(e)
-        print(f"    attempt {attempt}/{retries} failed: {err}")
+        log(f"    {label}: attempt {attempt}/{retries} failed: {err}")
         if r_is_voice_error(err):
             sys.exit("The server rejected the voice. Try --voice am_onyx (no blend syntax).")
-        time.sleep(3 * attempt)
+        if attempt < retries:
+            log(f"    {label}: retrying in {3 * attempt}s")
+            time.sleep(3 * attempt)
+    log(f"    {label}: giving up after {retries} attempts")
     sys.exit("Giving up on a chunk after repeated failures.")
 
 
@@ -266,6 +300,7 @@ def main():
     ap.add_argument("--out", help="output file (.m4b or .mp3/.m4a); default: <epub name>.m4b")
     ap.add_argument("--work", help="folder for chapter files; default: <epub name>_chapters")
     ap.add_argument("--list", action="store_true", help="only list the sections that would be read")
+    ap.add_argument("--log", help="log file to append to; default: <work>/convert.log")
     ap.add_argument("--pronunciations", nargs="+", metavar="FILE", default=[],
                     help="one or more files of words and how they should sound (.csv, .json, .py or .txt). "
                          "Later files override earlier ones, and all override the PRONUNCIATIONS dict in this script")
@@ -275,7 +310,7 @@ def main():
     for pfile in args.pronunciations:
         loaded = load_pronunciations(pfile)
         pron.update(loaded)
-        print(f"Loaded {len(loaded)} pronunciations from {pfile}")
+        log(f"Loaded {len(loaded)} pronunciations from {pfile}")
 
     stem = Path(args.epub).stem
     out_path = Path(args.out) if args.out else Path(f"{stem}.m4b")
@@ -285,38 +320,64 @@ def main():
     sections = extract_sections(args.epub)
     if not sections:
         sys.exit("No readable sections found.")
-    print(f"{len(sections)} sections:")
+    log(f"{len(sections)} sections:")
     for i, (title, text) in enumerate(sections, 1):
-        print(f"  {i:02d}  {len(text):>6} chars  {title}")
+        log(f"  {i:02d}  {len(text):>6} chars  {title}")
     if args.list:
         return
 
     work.mkdir(exist_ok=True)
+    global LOG_FILE
+    LOG_FILE = Path(args.log) if args.log else work / "convert.log"
+    log(f"Logging to {LOG_FILE}; server {args.url}; voice {args.voice}; pitch {args.pitch} tempo {args.tempo}"
+        + (" (no fx)" if args.no_fx else ""))
     fx = None if args.no_fx else (args.pitch, args.tempo)
     chapter_files, titles = [], []
+    hits = Counter()
+    todo_chars = sum(len(t) for k, (_, t) in enumerate(sections, 1) if not (work / f"chapter_{k:02d}.flac").exists())
+    done_chars = 0
+    started = time.time()
 
     for i, (title, text) in enumerate(sections, 1):
         chapter = work / f"chapter_{i:02d}.flac"
         chapter_files.append(chapter)
         titles.append(title)
         if chapter.exists():
-            print(f"[{i}/{len(sections)}] {title}: already done, skipping")
+            log(f"[{i}/{len(sections)}] {title}: already done, skipping")
             continue
-        chunks = chunk_text(apply_pronunciations(text, pron))
-        print(f"[{i}/{len(sections)}] {title}: {len(chunks)} chunks")
+        chunks = chunk_text(apply_pronunciations(text, pron, hits))
+        log(f"[{i}/{len(sections)}] {title}: {len(text)} chars, {len(chunks)} chunks")
+        chapter_start = time.time()
         chunk_files = []
         for j, chunk in enumerate(chunks, 1):
             cf = work / f"chapter_{i:02d}_part_{j:03d}.flac"
-            if not (cf.exists() and cf.stat().st_size > 0):  # reuse chunks from an interrupted run
-                synthesize(args.url, args.voice, args.speed, chunk, cf)
+            if cf.exists() and cf.stat().st_size > 0:  # reuse chunks from an interrupted run
+                log(f"    chunk {j}/{len(chunks)}: reusing existing file")
+            else:
+                t0 = time.time()
+                synthesize(args.url, args.voice, args.speed, chunk, cf, label=f"chunk {j}/{len(chunks)}")
+                log(f"    chunk {j}/{len(chunks)}: {len(chunk)} chars in {fmt_secs(time.time() - t0)}")
             chunk_files.append(cf)
         concat_to_chapter(chunk_files, chapter, work, fx)
         for cf in chunk_files:
             cf.unlink()
+        done_chars += len(text)
+        elapsed = time.time() - started
+        eta = elapsed / done_chars * (todo_chars - done_chars) if done_chars else 0
+        audio = float(probe(chapter, "format=duration"))
+        log(f"[{i}/{len(sections)}] {title}: done in {fmt_secs(time.time() - chapter_start)}, "
+            f"{fmt_secs(audio)} of audio. Elapsed {fmt_secs(elapsed)}, about {fmt_secs(eta)} left")
 
-    print("Combining chapters...")
+    if pron:
+        used = ", ".join(f"{w} x{n}" for w, n in hits.most_common()) or "none"
+        log(f"Pronunciations applied this run: {used}")
+
+    log("Combining chapters...")
     combine(chapter_files, titles, out_path, work)
-    print(f"Done: {out_path}")
+    total = sum(float(probe(f, "format=duration")) for f in chapter_files)
+    n_chap = len(probe(out_path, "chapter=id").splitlines())
+    log(f"Done: {out_path} ({out_path.stat().st_size / 1e6:.1f} MB, {fmt_secs(total)} of audio, "
+        f"{n_chap} chapter markers, {fmt_secs(time.time() - started)} this run)")
 
 
 if __name__ == "__main__":

@@ -103,7 +103,7 @@ New pronunciations only affect chapters generated afterwards. To redo a chapter,
 
 ### Voice and pace
 
-Defaults: voice blend `am_onyx(4)+am_adam(1)`, pitch `0.94`, tempo `0.95`. Pass overrides to the converter after `--`:
+Defaults: voice blend `am_onyx(4)+am_adam(1)`, pitch `0.94`, tempo `0.90`. Pass overrides to the converter after `--`:
 
 | Flag | Meaning |
 |---|---|
@@ -112,6 +112,7 @@ Defaults: voice blend `am_onyx(4)+am_adam(1)`, pitch `0.94`, tempo `0.95`. Pass 
 | `--voice am_onyx` | Voice or blend. Use a plain voice if your server rejects blend syntax. |
 | `--no-fx` | Skip the ffmpeg deep-voice processing. |
 | `--speed 1.0` | Server-side speed. Leave it near 1.0 and use `--tempo` to slow things down. |
+| `--log FILE` | Where to write the progress log. Default: `output/<slug>/chapters/convert.log` (one per book, appended on reruns). |
 
 ### Which sections are read
 
@@ -123,15 +124,74 @@ and use `--list` to preview.
 
 ## Tools
 
-| Script | What it does |
-|---|---|
-| `tools/make-audiobook.sh` | Two-step wrapper: find words, then convert. |
-| `tools/find_unknown_words.py` | Lists words not in an English dictionary. `--out names.csv` (also `.json`, `.py`, `.txt`), `--min-count`, `--top`, `--known FILE`. |
-| `tools/epub_to_kokoro.py` | Epub to chaptered `.m4b`. `--pronunciations FILE...`, `--url`, `--voice`, `--tempo`, `--pitch`, `--out`, `--work`, `--list`. |
-| `tools/test_pronunciation.py` | Saves each word as written and respelled so you can compare. |
-| `tools/update_glossary.py` | Merges a book's pronunciations into a series glossary. `--dry-run`, `--overwrite`. |
+Every script supports `--help`. All flags are listed here.
 
-Every script supports `--help`.
+### `tools/make-audiobook.sh EPUB SLUG [options] [-- converter flags]`
+
+Two-step wrapper: finds words on the first run, converts on the second.
+
+| Flag | Meaning |
+|---|---|
+| `--glossary FILE` | Shared pronunciations applied first. Repeatable. The book's `names.csv` always wins. |
+| `--url URL` | Kokoro server URL. Default: `$KOKORO_URL`. |
+| `--list` | Only preview which sections would be read. |
+| `--refresh` | Regenerate `names.csv` even if it exists (overwrites it!). |
+| `-- ...` | Everything after `--` goes to `epub_to_kokoro.py`. |
+
+### `tools/find_unknown_words.py EPUB`
+
+Lists words that are not in an English dictionary (mostly names and places).
+
+| Flag | Meaning |
+|---|---|
+| `--out [FILE]` | Save the full list. Format follows the extension: `.csv`, `.json`, `.py`, `.txt`. With no file name, writes `<epub name>_unknown_words.txt`. |
+| `--min-count N` | Ignore words seen fewer than N times (default 2). |
+| `--top N` | How many words to print (default 80). |
+| `--known FILE` | Text file of extra words to treat as known, one per line. |
+
+### `tools/epub_to_kokoro.py EPUB`
+
+Converts an epub to a chaptered `.m4b`. Resumable.
+
+| Flag | Meaning |
+|---|---|
+| `--url URL` | Kokoro server URL. Default: `$KOKORO_URL`, else `http://localhost:8880`. |
+| `--voice VOICE` | Voice or blend (default `am_onyx(4)+am_adam(1)`). |
+| `--speed X` | Server-side speed (default 1.0; keep near 1.0). |
+| `--pitch X` | Pitch shift (default 0.94). |
+| `--tempo X` | Final speaking speed (default 0.90). |
+| `--no-fx` | Skip the deep-voice ffmpeg processing. |
+| `--pronunciations FILE...` | One or more `.csv`, `.json`, `.py` or `.txt` files. Later files win. |
+| `--out FILE` | Output file, `.m4b` or `.mp3`/`.m4a`. Default: `<epub name>.m4b`. |
+| `--work DIR` | Folder for chapter files. Default: `<epub name>_chapters`. |
+| `--log FILE` | Progress log to append to. Default: `<work>/convert.log`. |
+| `--list` | Only list the sections that would be read. |
+
+### `tools/test_pronunciation.py [WORD ...]`
+
+Saves each word as written and respelled so you can compare. With no words, tests the filled-in entries of the
+pronunciation files.
+
+| Flag | Meaning |
+|---|---|
+| `--pronunciations FILE...` | Files to read respellings from. |
+| `--url URL` | Kokoro server URL. Default: `$KOKORO_URL`. |
+| `--voice VOICE` | Voice or blend (same default as the converter). |
+| `--speed X` | Server-side speed (default 1.0). |
+| `--fx` | Apply the deep-voice processing so the test matches the real run. |
+| `--pitch X`, `--tempo X` | Used with `--fx` (same defaults as the converter). |
+| `--sentence TEXT` | Custom test sentence; `{word}` is replaced (default: "The name {word} echoed through the hall."). |
+| `--max N` | Limit when testing a whole file (default 20). |
+| `--out-dir DIR` | Where the test clips go (default `pronunciation_tests`). |
+
+### `tools/update_glossary.py SOURCE GLOSSARY`
+
+Merges a book's pronunciations into a shared series glossary. Only filled-in entries are copied.
+
+| Flag | Meaning |
+|---|---|
+| `--dry-run` | Print the changes without writing. |
+| `--overwrite` | Let the book's entries replace existing glossary entries that differ. |
 
 ## Project layout
 

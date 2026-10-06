@@ -31,7 +31,7 @@ Ask with AskUserQuestion (up to four questions per call; use a second call or pl
 
 **Settings, offering defaults** (accept "defaults"):
 - Voice: default is the server blend `am_onyx(4)+am_adam(1)`; plain `am_onyx` if the server rejects blends.
-- Tempo: default `0.95`; `0.88` is noticeably slower. Keep the server speed at 1.0.
+- Tempo: default `0.90`; `0.88` is noticeably slower. Keep the server speed at 1.0.
 - Skip the deep-voice post-processing (`--no-fx`)?
 
 ## 2. Check prerequisites
@@ -79,7 +79,7 @@ Then run the same wrapper command again (with `--url` or `KOKORO_URL`, the gloss
 tools/make-audiobook.sh "<epub>" <slug> --glossary glossaries/<series>.csv --url <url> -- --tempo 0.9
 ```
 
-- It is long-running (large books take many minutes to hours). Run it in the background or with a long timeout and check progress; it prints one line per chapter.
+- It is long-running (large books take many minutes to hours). Run it in the background or with a long timeout and check progress. It prints timestamped, flushed progress (per chunk, per chapter, with an ETA) and also writes `output/<slug>/chapters/convert.log` (override with `-- --log FILE`); `tail -f` that file.
 - It is resumable: finished chapters are skipped and in-progress chunks reused, so rerun the same command after an interruption.
 - New pronunciations only affect chapters generated afterwards. To redo a chapter, delete its `output/<slug>/chapters/chapter_XX.flac` and rerun.
 - If the server rejects the voice, rerun with `-- --voice am_onyx`. If synthesis keeps failing, report the server's error instead of looping.
