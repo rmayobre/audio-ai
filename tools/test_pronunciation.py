@@ -11,7 +11,7 @@ Usage:
   python test_pronunciation.py Tocasia --pronunciations names.csv --fx    # include the deep-voice post-processing
   python test_pronunciation.py Urza --sentence "{word} drew his sword."   # custom sentence, {word} is replaced
 
-Options: --url (default $KOKORO_URL), --voice, --speed, --pitch, --tempo, --out-dir (default ./pronunciation_tests)
+Options: --url (default $KOKORO_URL), --voice, --speed, --pitch, --tempo, --out-dir (default <repo>/output/pronunciation_tests)
 Requires the same packages as epub_to_kokoro.py, plus a reachable Kokoro-FastAPI server.
 """
 import argparse
@@ -24,6 +24,7 @@ from epub_to_kokoro import (DEFAULT_PITCH, DEFAULT_TEMPO, DEFAULT_VOICE, apply_p
                             build_filter, load_pronunciations, probe, run, synthesize)
 
 DEFAULT_SENTENCE = "The name {word} echoed through the hall."
+DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "output" / "pronunciation_tests"
 
 
 def slug(word):
@@ -42,7 +43,8 @@ def main():
     ap.add_argument("--tempo", type=float, default=DEFAULT_TEMPO)
     ap.add_argument("--sentence", default=DEFAULT_SENTENCE)
     ap.add_argument("--max", type=int, default=20, help="limit when testing a whole file (default 20)")
-    ap.add_argument("--out-dir", default="pronunciation_tests")
+    ap.add_argument("--out-dir", default=str(DEFAULT_OUT_DIR),
+                    help="where the clips go (default: <repo>/output/pronunciation_tests)")
     args = ap.parse_args()
 
     if not args.url:

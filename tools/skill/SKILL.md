@@ -63,7 +63,12 @@ Optional spot check when the server is reachable:
 python tools/test_pronunciation.py --pronunciations output/<slug>/names.csv --max 10 --fx
 ```
 
-It writes each word as written and respelled into `pronunciation_tests/`; send the clips to the user and adjust.
+It writes each word as written and respelled into `output/pronunciation_tests/`; send the clips to the user and adjust.
+
+To check a whole glossary by ear: `python tools/test_glossary.py <glossary>` (renders as-written and respelled clips into one review file),
+then the user runs `python tools/review_pronunciations.py <glossary>` in a terminal. It plays each pair, asks which sounds best
+(1, 2, or r to repeat) and updates the glossary and moves decided clips into `clips/reviewed/` (ignored afterwards); picking Kokoro's own pronunciation leaves the second column blank, and blank
+rows are never respelled. `tools/play_audio.py FILE` plays any clip on Linux, macOS or Windows.
 
 ## 5. Convert (phase 2)
 

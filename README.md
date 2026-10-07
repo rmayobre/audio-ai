@@ -90,6 +90,7 @@ Write the pronunciation as a respelling a text-to-speech model will read natural
 hyphens, with doubled vowels or a familiar word to carry the sound. Leave it blank where the word already sounds
 right, since blank rows are ignored.
 
+- A blank pronunciation (`Urza,` or just `Urza`) means leave Kokoro's own pronunciation alone; the word is not respelled.
 - Matching is whole-word and case-sensitive, and longer entries win, so `Urza Planeswalker` beats `Urza`.
 - A pronunciation file can be `.csv`, `.json`, `.py` (a `PRONUNCIATIONS = {...}` dict) or `.txt` (`word = pronunciation`).
 - When you finish a book, save its pronunciations for the next one in the series:
@@ -182,11 +183,66 @@ pronunciation files.
 | `--pitch X`, `--tempo X` | Used with `--fx` (same defaults as the converter). |
 | `--sentence TEXT` | Custom test sentence; `{word}` is replaced (default: "The name {word} echoed through the hall."). |
 | `--max N` | Limit when testing a whole file (default 20). |
-| `--out-dir DIR` | Where the test clips go (default `pronunciation_tests`). |
+| `--out-dir DIR` | Where the test clips go (default `output/pronunciation_tests`, git-ignored). |
+
+### `tools/test_glossary.py [GLOSSARY ...]`
+
+Renders every entry of the glossaries (default: all of `glossaries/*.csv`) as written and respelled, and joins the
+clips into one review file per glossary with a timestamped index, so you can listen straight through and note the
+respellings that sound wrong. Clips are reused on reruns; a changed respelling gets a new clip.
+
+| Flag | Meaning |
+|---|---|
+| `GLOSSARY` | A glossary path or bare name such as `warcraft`. Default: every `glossaries/*.csv`. |
+| `--words WORD...` | Only test these words. |
+| `--max N`, `--start N` | Test N entries, skipping the first `--start`. |
+| `--respelled-only` | Skip the as-written clip. |
+| `--list` | Show what would be tested; no server needed. |
+| `--url`, `--voice`, `--speed`, `--pitch`, `--tempo`, `--sentence` | Same as `test_pronunciation.py`. |
+| `--no-fx` | Skip the deep-voice processing (it is on by default so clips match a real run). |
+| `--out-dir DIR` | Default `output/pronunciation_tests` (git-ignored); output is `<dir>/<glossary>/<glossary>_review.flac` and `.txt`. |
+
+### `tools/review_pronunciations.py [TEST_DIR ...]`
+
+Plays the clips made by `test_glossary.py` two at a time (clip 1 is Kokoro's own pronunciation, clip 2 is the
+respelling) and asks which sounds best. When every word is decided, the glossary is updated: the respelling is kept
+if you pick clip 2, and the second column is left **blank** if you pick clip 1. Choices are saved after every word, so
+you can quit and resume. Once a word is decided, its two clips move into `clips/reviewed/`; clips in a folder
+called `reviewed` are ignored on later runs, so a rerun only plays what is left (`test_glossary.py` also reuses them
+instead of re-rendering).
+
+| Prompt | Meaning |
+|---|---|
+| `1` / `2` | Clip 1 / clip 2 sounds best. |
+| `r` | Hear both clips again. |
+| `q` | Save progress and quit (the glossary is only written once all words are decided, or with `--apply`). |
+
+| Flag | Meaning |
+|---|---|
+| `TEST_DIR` | A folder in `output/pronunciation_tests/` or a glossary name. Default: all of them. |
+| `--shuffle` | Randomise which clip plays first (a blind test). `--shuffle-words` randomises the word order. |
+| `--show-respelling` | Print the respelling next to each word. |
+| `--redo` | Ask again about words already decided, including their clips in `reviewed/`. |
+| `--apply` | Write the decisions made so far without asking more. |
+| `--dry-run` | Show the glossary changes without writing anything: no glossary edit, no saved choices, no clips moved. |
+
+A book's own `output/<slug>/names.csv` is applied after the glossary and still wins, so edit it too if a book already
+carries an old respelling.
+
+### `tools/play_audio.py FILE`
+
+Plays an audio file on Linux, macOS or Windows with whatever is installed (ffplay, mpv, VLC, afplay, pw-play, paplay,
+sox, aplay, Windows SoundPlayer), converting to wav with ffmpeg when a player needs it. Verified on Linux only.
+
+| Flag | Meaning |
+|---|---|
+| `--start TIME` | Start offset such as `90`, `12:05` or `1:30:00` (ffplay, mpv, VLC). |
+| `--list-players` | Show the players found on this machine. |
+| `AUDIO_PLAYER` (env) | Force a player command, for example `AUDIO_PLAYER="mpv --no-video"`. |
 
 ### `tools/update_glossary.py SOURCE GLOSSARY`
 
-Merges a book's pronunciations into a shared series glossary. Only filled-in entries are copied.
+Merges a book's pronunciations into a shared series glossary. Only filled-in entries are copied. Blank rows already in the glossary are kept (they mean Kokoro's own pronunciation was chosen).
 
 | Flag | Meaning |
 |---|---|

@@ -20,6 +20,9 @@ tools/
   epub_to_kokoro.py        main converter (resumable)
   find_unknown_words.py    unrecognised-word finder, exports .csv/.json/.py/.txt
   test_pronunciation.py    renders a word as written vs. respelled so it can be heard
+  test_glossary.py         renders every glossary entry into one reviewable audio file with an index
+  review_pronunciations.py plays test clips two at a time and writes the chosen result back to the glossary
+  play_audio.py            cross-platform audio player (ffplay, mpv, VLC, afplay, pw-play, ...)
   update_glossary.py       merges a book's pronunciations into a shared series glossary
   make-audiobook.sh        two-phase wrapper tying the above together
   requirements.txt         Python dependencies (ffmpeg/ffprobe come from the OS)
@@ -70,7 +73,8 @@ unless the user asks, because full runs take a long time.
 - **Paths:** book titles contain spaces and apostrophes ("The Brothers' War"). Use `concat_line()` for ffmpeg
   concat lists, sanitised work-folder names, and quote every shell variable.
 - **Pronunciation files:** `.csv` (`word,count,pronunciation` or `word,pronunciation`), `.json`, `.py` (parsed with
-  `ast.literal_eval`, never executed), or `.txt` (`word = pronunciation`). Blank pronunciations are ignored. Several
+  `ast.literal_eval`, never executed), or `.txt` (`word = pronunciation`). Blank pronunciations are ignored (blank = keep Kokoro's own
+  pronunciation; glossaries keep blank rows to record that a word was reviewed). Several
   files can be given; later ones win. Replacement is whole-word, case-sensitive, longest match first.
 - **Speed vs. tempo:** keep the server `--speed` at 1.0 and use `--tempo` (ffmpeg) to slow delivery. Heavy server-side
   slowing and exaggerated voicepacks caused mispronunciations earlier.

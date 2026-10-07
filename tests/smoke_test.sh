@@ -63,4 +63,50 @@ python "$TMP/tools/update_glossary.py" "$TMP/output/smoke/names.csv" "$TMP/gloss
 head -1 "$TMP/glossary.out"
 grep -q "Urza,Er-zuh" "$TMP/gloss.csv"
 
+echo "== test_glossary (list, then render)"
+python "$TMP/tools/test_glossary.py" "$TMP/gloss.csv" --list > "$TMP/tl.out"
+grep -q "Mishra -> Mish-ruh" "$TMP/tl.out"
+python "$TMP/tools/test_glossary.py" "$TMP/gloss.csv" --out-dir "$TMP/gtests" >/dev/null
+test -s "$TMP/gtests/gloss/gloss_review.flac"
+grep -q "00:00  Mishra -> Mish-ruh" "$TMP/gtests/gloss/gloss_review.txt"
+grep -q "Mish-ruh" "$TMP/requests.log"
+
+echo "== blank second column = keep Kokoro's pronunciation"
+printf 'Blankword,\nBareword\n' >> "$TMP/gloss.csv"
+python "$TMP/tools/test_glossary.py" "$TMP/gloss.csv" --out-dir "$TMP/gtests" > "$TMP/tg.out"
+grep -q "2 blank entries skipped" "$TMP/tg.out"
+python "$TMP/tools/update_glossary.py" "$TMP/output/smoke/names.csv" "$TMP/gloss.csv" >/dev/null
+grep -q "^Blankword,$" "$TMP/gloss.csv" || { echo "blank glossary row was lost by update_glossary"; exit 1; }
+
+echo "== play_audio"
+CLIP=$(ls "$TMP"/gtests/gloss/clips/*.flac | head -1)
+python "$TMP/tools/play_audio.py" --list-players >/dev/null
+AUDIO_PLAYER=true python "$TMP/tools/play_audio.py" "$CLIP"
+python "$TMP/tools/play_audio.py" "$TMP/missing.flac" 2>/dev/null && { echo "missing file should fail"; exit 1; } || true
+
+echo "== review_pronunciations (r replays, 1 = clip 1 / native, 2 = clip 2 / respelled)"
+export AUDIO_PLAYER=true
+printf 'r\n1\n2\n' | python "$TMP/tools/review_pronunciations.py" "$TMP/gtests/gloss" >/dev/null
+grep -q "^Mishra,$" "$TMP/gloss.csv" || { echo "choosing clip 1 should blank Mishra"; exit 1; }
+grep -q "^Urza,Er-zuh$" "$TMP/gloss.csv" || { echo "choosing clip 2 should keep Urza's respelling"; exit 1; }
+grep -q "^Blankword,$" "$TMP/gloss.csv" || { echo "review dropped a blank row"; exit 1; }
+! grep -q "Mish-ruh" "$TMP/gloss.csv" || { echo "Mishra respelling should be gone"; exit 1; }
+G="$TMP/gtests/gloss/clips"
+[ -z "$(ls "$G"/*.flac 2>/dev/null)" ] || { echo "reviewed clips were not moved out of clips/"; exit 1; }
+[ "$(ls "$G"/reviewed/*.flac | wc -l)" -eq 4 ] || { echo "expected 4 clips in clips/reviewed/"; exit 1; }
+printf '' | python "$TMP/tools/review_pronunciations.py" "$TMP/gtests/gloss" > "$TMP/rv0.out"
+grep -q "0 to review" "$TMP/rv0.out" || { echo "clips in reviewed/ should be ignored"; exit 1; }
+printf 'q\n' | python "$TMP/tools/review_pronunciations.py" "$TMP/gtests/gloss" --redo > "$TMP/rv.out"
+grep -q "0 change(s)" "$TMP/rv.out"  # quitting a --redo keeps earlier decisions; nothing changes
+echo "== a changed respelling re-renders only its own clip; the as-written clip is reused from reviewed/"
+N1=$(wc -l < "$TMP/requests.log")
+sed -i 's/^Urza,Er-zuh$/Urza,Er-zah/' "$TMP/gloss.csv"
+python "$TMP/tools/test_glossary.py" "$TMP/gloss.csv" --out-dir "$TMP/gtests" > "$TMP/tg2.out"
+N2=$(wc -l < "$TMP/requests.log")
+[ $((N2 - N1)) -eq 1 ] || { echo "expected exactly 1 new request, got $((N2 - N1))"; exit 1; }
+printf '2\n' | python "$TMP/tools/review_pronunciations.py" "$TMP/gtests/gloss" > "$TMP/rv2.out"
+grep -q "^Urza,Er-zah$" "$TMP/gloss.csv" || { echo "new respelling choice was not written"; exit 1; }
+[ -z "$(ls "$G"/*.flac 2>/dev/null)" ] || { echo "new clip was not moved to reviewed/"; exit 1; }
+unset AUDIO_PLAYER
+
 echo "ALL OK"

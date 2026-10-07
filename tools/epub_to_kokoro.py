@@ -135,8 +135,12 @@ def extract_sections(epub_path):
     return sections
 
 
-def load_pronunciations(path):
+def load_pronunciations(path, keep_blank=False):
     """Read a {word: pronunciation} table from a file. Entries with an empty pronunciation are skipped.
+
+    A blank pronunciation (e.g. `Urza,` or just `Urza`) means "leave Kokoro's own pronunciation alone", so the
+    word is never respelled. Pass keep_blank=True to keep those rows (value ""), which is how glossaries record
+    that a word was reviewed and Kokoro's version was chosen.
 
     .csv   header row with 'word' and 'pronunciation' columns (the file from find_unknown_words.py --out x.csv)
     .json  {"word": "pronunciation"}  or  [{"word": ..., "pronunciation": ...}]
@@ -176,7 +180,8 @@ def load_pronunciations(path):
                 continue
             word, spoken = line.split(sep, 1)
             table[word.strip()] = spoken.strip()
-    return {w.strip(): s.strip() for w, s in table.items() if w.strip() and s.strip()}
+    return {w.strip(): (s or "").strip() for w, s in table.items()
+            if w.strip() and (keep_blank or (s or "").strip())}
 
 
 def apply_pronunciations(text, table, hits=None):

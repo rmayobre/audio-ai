@@ -9,7 +9,9 @@ Usage:
   python update_glossary.py names.csv glossary.csv --overwrite     # let the book's entries replace existing ones
 
 Only entries with a filled-in pronunciation are copied. Existing glossary entries are kept unless --overwrite
-is given; conflicts are always reported. The glossary is written as a `word,pronunciation` CSV sorted by word.
+is given; conflicts are always reported. Blank rows already in the glossary (words reviewed where Kokoro's own
+pronunciation was chosen) are preserved, and win over a book's respelling unless --overwrite. The glossary is
+written as a `word,pronunciation` CSV sorted by word.
 """
 import argparse
 import csv
@@ -29,19 +31,21 @@ def main():
 
     gloss_path = Path(args.glossary)
     source = load_pronunciations(args.source)
-    glossary = load_pronunciations(gloss_path) if gloss_path.exists() else {}
+    # keep blank rows: they record "reviewed, Kokoro's own pronunciation is fine" and must survive a rewrite
+    glossary = load_pronunciations(gloss_path, keep_blank=True) if gloss_path.exists() else {}
 
     added, changed, conflicts = [], [], []
     for word, spoken in source.items():
         if word not in glossary:
             glossary[word] = spoken
             added.append(word)
-        elif glossary[word] != spoken:
+        elif glossary[word] != spoken:  # includes a blank glossary entry: that decision is kept unless --overwrite
             if args.overwrite:
                 changed.append(f"{word}: {glossary[word]!r} -> {spoken!r}")
                 glossary[word] = spoken
             else:
-                conflicts.append(f"{word}: keeping {glossary[word]!r}, book has {spoken!r}")
+                kept = glossary[word] or "Kokoro's own pronunciation"
+                conflicts.append(f"{word}: keeping {kept!r}, book has {spoken!r}")
 
     print(f"{len(added)} added, {len(changed)} replaced, {len(conflicts)} conflicts kept as-is, "
           f"{len(glossary)} total in glossary")
