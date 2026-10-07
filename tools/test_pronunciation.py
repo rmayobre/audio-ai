@@ -6,9 +6,9 @@ For each word it renders one short sentence twice (as written, and with your res
 so you can compare, and saves the clips as audio files.
 
 Usage:
-  python test_pronunciation.py Urza Mishra --pronunciations ../output/brothers-war/names.csv
-  python test_pronunciation.py --pronunciations names.csv --max 10        # test the first 10 filled-in entries
-  python test_pronunciation.py Tocasia --pronunciations names.csv --fx    # include the deep-voice post-processing
+  python test_pronunciation.py Urza Mishra --pronunciations ../output/brothers-war/words.csv
+  python test_pronunciation.py --pronunciations words.csv --max 10        # test the first 10 filled-in entries
+  python test_pronunciation.py Tocasia --pronunciations words.csv --fx    # include the deep-voice post-processing
   python test_pronunciation.py Urza --sentence "{word} drew his sword."   # custom sentence, {word} is replaced
 
 Options: --url (default $KOKORO_URL), --voice, --speed, --pitch, --tempo, --out-dir (default <repo>/output/pronunciation_tests)

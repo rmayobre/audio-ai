@@ -8,9 +8,9 @@ description: Turn an epub into a chaptered audiobook with Kokoro: find unusual n
 Builds one chaptered `.m4b` from an epub through a Kokoro-FastAPI server, after fixing how invented names and unusual words are pronounced. It drives the user's `audiobooks` repository (see its `AGENTS.md`).
 
 Repo layout (relative to the repo root):
-- `tools/make-audiobook.sh EPUB SLUG [--glossary FILE]... [--list] [--url URL] [-- extra converter args]` is the two-phase wrapper. Phase 1 writes `output/SLUG/names.csv` and stops. Running it again does phase 2 and writes `output/SLUG/SLUG.m4b`.
+- `tools/make-audiobook.sh EPUB SLUG [--glossary FILE]... [--list] [--url URL] [-- extra converter args]` is the two-phase wrapper. Phase 1 writes `output/SLUG/words.csv` and stops. Running it again does phase 2 and writes `output/SLUG/SLUG.m4b`.
 - `tools/find_unknown_words.py`, `tools/epub_to_kokoro.py`, `tools/test_pronunciation.py`, `tools/update_glossary.py` are the underlying tools.
-- `glossaries/<series>.csv` holds shared pronunciations (`word,pronunciation`); `output/SLUG/names.csv` holds one book's (`word,count,pronunciation`).
+- `glossaries/<series>.csv` holds shared pronunciations (`word,pronunciation`); `output/SLUG/words.csv` holds one book's (`word,count,pronunciation`).
 - `tests/smoke_test.sh` checks the toolchain against a fake server.
 
 ## 1. Collect inputs before doing any work
@@ -45,7 +45,7 @@ Ask with AskUserQuestion (up to four questions per call; use a second call or pl
 tools/make-audiobook.sh "<epub>" <slug> --glossary glossaries/<series>.csv
 ```
 
-This writes `output/<slug>/names.csv` and stops. If it already exists, keep it (use `--refresh` only if the user asks, because it overwrites their work). Read the list. Rare but real English words (archaic or technical terms) usually need no change; names, places and invented terms are the focus.
+This writes `output/<slug>/words.csv` and stops. If it already exists, keep it (use `--refresh` only if the user asks, because it overwrites their work). Read the list. Rare but real English words (archaic or technical terms) usually need no change; names, places and invented terms are the focus.
 
 ## 4. Fill in pronunciations
 
@@ -55,12 +55,12 @@ Work from the most to the least frequent word.
 - Write a respelling a text-to-speech model reads naturally: lowercase syllables joined by hyphens, with doubled vowels or a familiar word to carry the sound (for example `Er-zuh`, `Toe-kay-zhuh`). Avoid symbols and capitals inside a word. Use `[word](/phonemes/)` markup only if the user asks and the server handles it.
 - Leave `pronunciation` blank for words that already sound right. Keep the header `word,count,pronunciation` and the exact casing from the book (replacement is whole-word and case-sensitive). Add multi-word names as their own rows.
 
-Show the user a compact table of word → respelling, with uncertain entries marked and the source for each, and ask them to confirm or correct before synthesis. Save their corrections into `names.csv`.
+Show the user a compact table of word → respelling, with uncertain entries marked and the source for each, and ask them to confirm or correct before synthesis. Save their corrections into `words.csv`.
 
 Optional spot check when the server is reachable:
 
 ```bash
-python tools/test_pronunciation.py --pronunciations output/<slug>/names.csv --max 10 --fx
+python tools/test_pronunciation.py --pronunciations output/<slug>/words.csv --max 10 --fx
 ```
 
 It writes each word as written and respelled into `output/pronunciation_tests/`; send the clips to the user and adjust.
@@ -91,8 +91,8 @@ tools/make-audiobook.sh "<epub>" <slug> --glossary glossaries/<series>.csv --url
 
 ## 6. Finish
 
-- Send the finished `.m4b` and the final `names.csv` with SendUserFile. If the file is too large to send, say where it is.
-- Offer to save the new pronunciations for the next book in the series: `python tools/update_glossary.py output/<slug>/names.csv glossaries/<series>.csv`.
+- Send the finished `.m4b` and the final `words.csv` with SendUserFile. If the file is too large to send, say where it is.
+- Offer to save the new pronunciations for the next book in the series: `python tools/update_glossary.py output/<slug>/words.csv glossaries/<series>.csv`.
 - Summarize in two or three lines: sections read, pronunciations applied, and any words left uncertain.
 - End with a "Sources:" list of the pages used to confirm pronunciations, as markdown links.
 

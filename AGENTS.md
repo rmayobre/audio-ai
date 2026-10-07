@@ -29,7 +29,7 @@ tools/
   skill/SKILL.md           copy of the Claude skill that drives this workflow
 glossaries/                shared pronunciations per series (tracked), e.g. magic-the-gathering.csv
 books/                     source epubs (git-ignored; copyrighted)
-output/<slug>/             per book: names.csv (TRACKED), chapters/ and <slug>.m4b (git-ignored)
+output/<slug>/             per book: words.csv (TRACKED), chapters/ and <slug>.m4b (git-ignored)
 tests/                     smoke_test.sh + fake_kokoro_server.py (no real TTS or network needed)
 ```
 
@@ -44,16 +44,16 @@ export KOKORO_URL=https://your-kokoro-server
 ## Everyday commands
 
 ```bash
-# Phase 1: write output/<slug>/names.csv (stops so pronunciations can be filled in)
+# Phase 1: write output/<slug>/words.csv (stops so pronunciations can be filled in)
 tools/make-audiobook.sh "books/Some Book.epub" some-book --glossary glossaries/<series>.csv
 # Phase 2 (same command again): convert to output/<slug>/<slug>.m4b
 tools/make-audiobook.sh "books/Some Book.epub" some-book --glossary glossaries/<series>.csv
 # Preview which sections will be read
 tools/make-audiobook.sh "books/Some Book.epub" some-book --list
 # Hear respellings before a full run
-python tools/test_pronunciation.py --pronunciations output/some-book/names.csv --max 10 --fx
+python tools/test_pronunciation.py --pronunciations output/some-book/words.csv --max 10 --fx
 # Save a finished book's pronunciations for the next book in the series
-python tools/update_glossary.py output/some-book/names.csv glossaries/<series>.csv
+python tools/update_glossary.py output/some-book/words.csv glossaries/<series>.csv
 ```
 
 Extra flags for the converter go after `--`, for example `-- --tempo 0.88 --voice am_onyx`.
@@ -88,7 +88,7 @@ unless the user asks, because full runs take a long time.
   trusted wikis; mark anything uncertain and ask. Leave `pronunciation` blank for words that already sound right.
 - Ask for the Kokoro URL and any book context instead of assuming. Do not hardcode a server URL in committed files;
   it comes from `KOKORO_URL` or `--url`.
-- Do not commit epubs or generated audio (`.gitignore` covers them). Do commit `output/<slug>/names.csv` and
+- Do not commit epubs or generated audio (`.gitignore` covers them). Do commit `output/<slug>/words.csv` and
   glossaries; that is the reusable work.
 - Prefer small, additive changes to `tools/`; keep the scripts dependency-light (see `requirements.txt`) and make
   new options discoverable via `--help` and the module docstring.

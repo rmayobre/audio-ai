@@ -4,9 +4,9 @@ Merge a finished book's pronunciations into a shared series glossary so the next
 universe starts with them already filled in.
 
 Usage:
-  python update_glossary.py ../output/brothers-war/names.csv ../glossaries/magic-the-gathering.csv
-  python update_glossary.py names.csv glossary.csv --dry-run      # show what would change
-  python update_glossary.py names.csv glossary.csv --overwrite     # let the book's entries replace existing ones
+  python update_glossary.py ../output/brothers-war/words.csv ../glossaries/magic-the-gathering.csv
+  python update_glossary.py words.csv glossary.csv --dry-run      # show what would change
+  python update_glossary.py words.csv glossary.csv --overwrite     # let the book's entries replace existing ones
 
 Only entries with a filled-in pronunciation are copied. Existing glossary entries are kept unless --overwrite
 is given; conflicts are always reported. Blank rows already in the glossary (words reviewed where Kokoro's own

@@ -15,15 +15,15 @@ Usage:
   python epub_to_kokoro.py book.epub --url http://localhost:8880 --out arthas.m4b
   python epub_to_kokoro.py book.epub --voice am_onyx --no-fx      # plain voice, no post-processing
   python epub_to_kokoro.py book.epub --list                       # just show which sections it would read
-  python epub_to_kokoro.py book.epub --pronunciations names.csv   # respell words from a file (csv/json/py/txt)
-  python epub_to_kokoro.py book.epub --pronunciations ../glossaries/series.csv names.csv   # later files win
+  python epub_to_kokoro.py book.epub --pronunciations words.csv   # respell words from a file (csv/json/py/txt)
+  python epub_to_kokoro.py book.epub --pronunciations ../glossaries/series.csv words.csv   # later files win
   KOKORO_URL=https://kokoro.example.com python epub_to_kokoro.py book.epub   # URL from the environment
 
 Pronunciation files (empty pronunciations are ignored):
-  names.csv   word,count,pronunciation        (what find_unknown_words.py --out names.csv writes)
-  names.json  {"Urza": "Er-zuh"}  or  [{"word": "Urza", "pronunciation": "Er-zuh"}]
-  names.py    PRONUNCIATIONS = {"Urza": "Er-zuh"}
-  names.txt   Urza = Er-zuh        (one per line, '#' comments)
+  words.csv   word,count,pronunciation        (what find_unknown_words.py --out words.csv writes)
+  words.json  {"Urza": "Er-zuh"}  or  [{"word": "Urza", "pronunciation": "Er-zuh"}]
+  words.py    PRONUNCIATIONS = {"Urza": "Er-zuh"}
+  words.txt   Urza = Er-zuh        (one per line, '#' comments)
 Chapters already finished are skipped on a rerun, so delete chapter_XX.flac for any chapter you want redone
 with new pronunciations.
 

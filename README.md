@@ -18,10 +18,10 @@ Pronunciations are saved per book and per series, so the work carries over to th
 
 ```
 book.epub
-   │  find_unknown_words.py      words not in an English dictionary  ──►  names.csv
+   │  find_unknown_words.py      words not in an English dictionary  ──►  words.csv
    │                                                                         │ you fill in respellings
    ▼                                                                         ▼
-epub_to_kokoro.py  ◄───────────────────────────  glossaries/<series>.csv + names.csv
+epub_to_kokoro.py  ◄───────────────────────────  glossaries/<series>.csv + words.csv
    │  split into chapters → apply respellings → Kokoro server → ffmpeg deep-voice → chapter_XX.flac
    ▼
 output/<slug>/<slug>.m4b   (one file, chapter markers)
@@ -54,31 +54,31 @@ The wrapper `tools/make-audiobook.sh` works in two steps. Run the same command t
 ```bash
 cp "/path/to/Some Book.epub" books/
 
-# Step 1: find unusual words and write output/some-book/names.csv, then stop
+# Step 1: find unusual words and write output/some-book/words.csv, then stop
 tools/make-audiobook.sh "books/Some Book.epub" some-book --glossary glossaries/some-series.csv
 
 # Fill in the pronunciation column for any word that sounds wrong (leave the rest blank).
 # Then listen to a few before committing to the full run:
-python tools/test_pronunciation.py --pronunciations output/some-book/names.csv --max 10 --fx
+python tools/test_pronunciation.py --pronunciations output/some-book/words.csv --max 10 --fx
 
 # Step 2: convert (run the exact same command again)
 tools/make-audiobook.sh "books/Some Book.epub" some-book --glossary glossaries/some-series.csv
 ```
 
 The result is `output/some-book/some-book.m4b`. `--glossary` is optional and can be repeated; the book's own
-`names.csv` is applied last and wins on conflicts.
+`words.csv` is applied last and wins on conflicts.
 
 Other things you can do with the wrapper:
 
 ```bash
 tools/make-audiobook.sh "books/Some Book.epub" some-book --list               # preview which sections would be read
 tools/make-audiobook.sh "books/Some Book.epub" some-book -- --tempo 0.88      # extra flags go to the converter after --
-tools/make-audiobook.sh "books/Some Book.epub" some-book --refresh            # regenerate names.csv (overwrites it!)
+tools/make-audiobook.sh "books/Some Book.epub" some-book --refresh            # regenerate words.csv (overwrites it!)
 ```
 
 ### Fixing pronunciations
 
-Open `output/<slug>/names.csv`:
+Open `output/<slug>/words.csv`:
 
 ```csv
 word,count,pronunciation
@@ -96,7 +96,7 @@ right, since blank rows are ignored.
 - When you finish a book, save its pronunciations for the next one in the series:
 
   ```bash
-  python tools/update_glossary.py output/some-book/names.csv glossaries/some-series.csv
+  python tools/update_glossary.py output/some-book/words.csv glossaries/some-series.csv
   ```
 
 New pronunciations only affect chapters generated afterwards. To redo a chapter, delete its
@@ -133,15 +133,15 @@ Two-step wrapper: finds words on the first run, converts on the second.
 
 | Flag | Meaning |
 |---|---|
-| `--glossary FILE` | Shared pronunciations applied first. Repeatable. The book's `names.csv` always wins. |
+| `--glossary FILE` | Shared pronunciations applied first. Repeatable. The book's `words.csv` always wins. |
 | `--url URL` | Kokoro server URL. Default: `$KOKORO_URL`. |
 | `--list` | Only preview which sections would be read. |
-| `--refresh` | Regenerate `names.csv` even if it exists (overwrites it!). |
+| `--refresh` | Regenerate `words.csv` even if it exists (overwrites it!). |
 | `-- ...` | Everything after `--` goes to `epub_to_kokoro.py`. |
 
 ### `tools/find_unknown_words.py EPUB`
 
-Lists words that are not in an English dictionary (mostly names and places).
+Lists words that are not in an English dictionary (mostly names and places). The result, `words.csv`, holds every unrecognised word (names, invented terms, dialect and the odd fragment), not only names. Books started before the rename have `names.csv`; `make-audiobook.sh` renames it to `words.csv` automatically.
 
 | Flag | Meaning |
 |---|---|
@@ -226,7 +226,7 @@ instead of re-rendering).
 | `--apply` | Write the decisions made so far without asking more. |
 | `--dry-run` | Show the glossary changes without writing anything: no glossary edit, no saved choices, no clips moved. |
 
-A book's own `output/<slug>/names.csv` is applied after the glossary and still wins, so edit it too if a book already
+A book's own `output/<slug>/words.csv` is applied after the glossary and still wins, so edit it too if a book already
 carries an old respelling.
 
 ### `tools/play_audio.py FILE`
@@ -255,7 +255,7 @@ Merges a book's pronunciations into a shared series glossary. Only filled-in ent
 tools/            the scripts above, requirements.txt, and a copy of the Claude skill (skill/SKILL.md)
 glossaries/       shared pronunciations per series (tracked in git)
 books/            your epubs (git-ignored)
-output/<slug>/    names.csv (tracked), chapters/ and the finished .m4b (git-ignored)
+output/<slug>/    words.csv (tracked), chapters/ and the finished .m4b (git-ignored)
 tests/            smoke test and a fake Kokoro server
 ```
 
@@ -265,7 +265,7 @@ tests/            smoke test and a fake Kokoro server
 |---|---|
 | `No Kokoro server URL` | Set `KOKORO_URL` or pass `--url`. |
 | Server rejects the voice | Use `--voice am_onyx` (plain voice instead of a blend). |
-| A word is still said wrong | Respell it in `names.csv`, check it with `test_pronunciation.py`, delete the affected chapter's `.flac`, rerun. |
+| A word is still said wrong | Respell it in `words.csv`, check it with `test_pronunciation.py`, delete the affected chapter's `.flac`, rerun. |
 | Pace is too fast | Lower `--tempo` (for example 0.88). Keep the server `--speed` at 1.0. |
 | Speech sounds slurred or robotic | Avoid heavy server-side slowing or unusual voice blends; get depth from `--pitch` and the bass boost instead. |
 | Chapter missing or wrong order | Run with `--list` and adjust the section patterns at the top of `epub_to_kokoro.py`. |

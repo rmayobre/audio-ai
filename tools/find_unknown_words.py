@@ -8,8 +8,8 @@ Usage:
   python find_unknown_words.py book.epub
   python find_unknown_words.py book.epub --min-count 3 --top 100
   python find_unknown_words.py book.epub --known my_words.txt   # extra words to ignore, one per line
-  python find_unknown_words.py book.epub --out names.csv        # save the full list; format follows the extension
-  python find_unknown_words.py book.epub --out names.py         # save a PRONUNCIATIONS dict template
+  python find_unknown_words.py book.epub --out words.csv        # save the full list; format follows the extension
+  python find_unknown_words.py book.epub --out words.py         # save a PRONUNCIATIONS dict template
   python find_unknown_words.py book.epub --out                  # save to <epub name>_unknown_words.txt
 
 Requires: pip install ebooklib beautifulsoup4 pyspellchecker

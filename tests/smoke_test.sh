@@ -35,11 +35,11 @@ W="$TMP/tools/make-audiobook.sh"
 
 echo "== phase 1: find unknown words"
 "$W" "$EPUB" smoke --glossary "$TMP/gloss.csv" 2>&1 | tail -3 || true
-test -f "$TMP/output/smoke/names.csv"
-grep -q "Urza" "$TMP/output/smoke/names.csv"
+test -f "$TMP/output/smoke/words.csv"
+grep -q "Urza" "$TMP/output/smoke/words.csv"
 
 printf 'word,pronunciation\nMishra,Mish-ruh\n' > "$TMP/gloss.csv"
-sed -i 's/^Urza,\([0-9]*\),$/Urza,\1,Er-zuh/' "$TMP/output/smoke/names.csv"
+sed -i 's/^Urza,\([0-9]*\),$/Urza,\1,Er-zuh/' "$TMP/output/smoke/words.csv"
 
 echo "== phase 2: convert"
 "$W" "$EPUB" smoke --glossary "$TMP/gloss.csv" -- --tempo 0.9
@@ -58,8 +58,15 @@ N1=$(wc -l < "$TMP/requests.log")
 N2=$(wc -l < "$TMP/requests.log")
 [ "$N1" -eq "$N2" ] || { echo "resume re-synthesized chapters"; exit 1; }
 
+echo "== a book started before the rename (names.csv) is migrated, not regenerated"
+mv "$TMP/output/smoke/words.csv" "$TMP/output/smoke/names.csv"
+"$W" "$EPUB" smoke --glossary "$TMP/gloss.csv" -- --tempo 0.9 > "$TMP/migrate.out"
+grep -q "Renamed" "$TMP/migrate.out"
+test -f "$TMP/output/smoke/words.csv" && ! test -f "$TMP/output/smoke/names.csv"
+grep -q "Urza,[0-9]*,Er-zuh" "$TMP/output/smoke/words.csv"
+
 echo "== update_glossary"
-python "$TMP/tools/update_glossary.py" "$TMP/output/smoke/names.csv" "$TMP/gloss.csv" > "$TMP/glossary.out"
+python "$TMP/tools/update_glossary.py" "$TMP/output/smoke/words.csv" "$TMP/gloss.csv" > "$TMP/glossary.out"
 head -1 "$TMP/glossary.out"
 grep -q "Urza,Er-zuh" "$TMP/gloss.csv"
 
@@ -75,7 +82,7 @@ echo "== blank second column = keep Kokoro's pronunciation"
 printf 'Blankword,\nBareword\n' >> "$TMP/gloss.csv"
 python "$TMP/tools/test_glossary.py" "$TMP/gloss.csv" --out-dir "$TMP/gtests" > "$TMP/tg.out"
 grep -q "2 blank entries skipped" "$TMP/tg.out"
-python "$TMP/tools/update_glossary.py" "$TMP/output/smoke/names.csv" "$TMP/gloss.csv" >/dev/null
+python "$TMP/tools/update_glossary.py" "$TMP/output/smoke/words.csv" "$TMP/gloss.csv" >/dev/null
 grep -q "^Blankword,$" "$TMP/gloss.csv" || { echo "blank glossary row was lost by update_glossary"; exit 1; }
 
 echo "== play_audio"

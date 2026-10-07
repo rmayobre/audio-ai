@@ -24,7 +24,7 @@ called "reviewed" are ignored on later runs (they are not played again). Use --r
 
 Choices are saved to review_results.json after every word, so you can quit and resume later. The glossary is
 updated once every word has been decided, or earlier with --apply. Needs a terminal to answer in and an audio player
-(see play_audio.py --list-players). Note: a book's own output/<slug>/names.csv is applied after the glossary and
+(see play_audio.py --list-players). Note: a book's own output/<slug>/words.csv is applied after the glossary and
 still wins for that book, so edit it too if a book already carries the old respelling.
 """
 import argparse
