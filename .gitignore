@@ -27,4 +27,6 @@
 books/*
 output/*
 glossaries/*
+!glossaries/warcraft.csv
+!glossaries/magic-the-gathering.csv
 */__pycache__/*
