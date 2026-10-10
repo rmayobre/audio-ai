@@ -168,4 +168,15 @@ assert not any("oceanofpdf" in x.lower() for _, x in secs), "stray text left in"
 assert secs[2][1].startswith("Chapter 7.\n"), "image-only title was not spoken"
 EOF3
 
+echo "== Roman numerals are spelled out"
+python -I - "$TMP" <<'EOF4'
+import sys
+sys.path.insert(0, sys.argv[1] + "/tools")
+from epub_to_kokoro import expand_roman_numerals as e
+assert e("Terenas Menethil II ruled.") == "Terenas Menethil the Second ruled."
+assert e("Henry VIII and Menethil II's son") == "Henry the Eighth and Menethil the Second's son"
+assert e("See Part II and Chapter IV.") == "See Part two and Chapter four."
+assert e("I and V and he said II was odd") == "I and V and he said II was odd"
+EOF4
+
 echo "ALL OK"

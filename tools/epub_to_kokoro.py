@@ -25,6 +25,9 @@ Pronunciation files (empty pronunciations are ignored):
   words.json  {"Urza": "Er-zuh"}  or  [{"word": "Urza", "pronunciation": "Er-zuh"}]
   words.py    PRONUNCIATIONS = {"Urza": "Er-zuh"}
   words.txt   Urza = Er-zuh        (one per line, '#' comments)
+Roman numerals II-XX are spelled out unless --no-roman-numerals is given: after a name ("Terenas Menethil II")
+they become "the Second"; after Part/Book/Chapter/Act/etc. ("Part II") they become "two". Pronunciation files are
+applied first, so an entry such as "Menethil II" always overrides this.
 Chapters already finished are skipped on a rerun, so delete chapter_XX.flac for any chapter you want redone
 with new pronunciations.
 
@@ -250,6 +253,41 @@ def apply_pronunciations(text, table, hits=None):
     return pattern.sub(sub, text)
 
 
+ORDINALS = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
+            "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth",
+            "eighteenth", "nineteenth", "twentieth"]
+CARDINALS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+             "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"]
+# II-XX only: a lone I, V or X is too often a pronoun, a letter or a variable
+ROMAN = {r: n for n, r in enumerate(
+    "I II III IV V VI VII VIII IX X XI XII XIII XIV XV XVI XVII XVIII XIX XX".split(), 1) if len(r) > 1}
+_ROMAN = "|".join(sorted(ROMAN, key=len, reverse=True))
+# "Part II", "Book III", "World War II" are counts, so they are read as numbers rather than "the Second"
+ROMAN_COUNT_WORDS = ("part", "book", "chapter", "act", "volume", "vol", "section", "appendix", "phase", "stage",
+                     "level", "episode", "season", "article", "war", "world war", "class", "type", "tier")
+ROMAN_AFTER_WORD = re.compile(rf"\b([A-Za-z][\w'\u2019-]*)([ \t]+)({_ROMAN})\b")
+
+
+def expand_roman_numerals(text, hits=None):
+    """Spell out Roman numerals II-XX so they are not read as letters or odd words.
+    After a capitalised name they become ordinals ("Terenas Menethil II" -> "Terenas Menethil the Second");
+    after Part/Book/Chapter/Act/... they become numbers ("Part II" -> "Part two"). Anything else is left alone.
+    If `hits` (a Counter) is given, it is incremented for every replacement made."""
+    def sub(m):
+        word, space, numeral = m.groups()
+        n = ROMAN[numeral]
+        if word.lower() in ROMAN_COUNT_WORDS:
+            spoken = f"{word}{space}{CARDINALS[n - 1]}"
+        elif word[0].isupper():
+            spoken = f"{word}{space}the {ORDINALS[n - 1].capitalize()}"
+        else:
+            return m.group(0)
+        if hits is not None:
+            hits[m.group(0)] += 1
+        return spoken
+    return ROMAN_AFTER_WORD.sub(sub, text)
+
+
 def chunk_text(text, limit=CHUNK_CHARS):
     chunks, cur = [], ""
     for para in text.split("\n"):
@@ -375,6 +413,9 @@ def main():
     ap.add_argument("--pronunciations", nargs="+", metavar="FILE", default=[],
                     help="one or more files of words and how they should sound (.csv, .json, .py or .txt). "
                          "Later files override earlier ones, and all override the PRONUNCIATIONS dict in this script")
+    ap.add_argument("--no-roman-numerals", action="store_true",
+                    help="do not spell out Roman numerals (\"Menethil II\" -> \"Menethil the Second\", \"Part II\" -> "
+                         "\"Part two\"); glossary entries are applied first and always win")
     args = ap.parse_args()
     resolve_voice(args)
 
@@ -407,7 +448,7 @@ def main():
     check_voice_settings(work, settings)
     fx = (args.pitch, args.tempo, args.bass_db) if args.fx else None
     chapter_files, titles = [], []
-    hits = Counter()
+    hits, roman_hits = Counter(), Counter()
     todo_chars = sum(len(t) for k, (_, t) in enumerate(sections, 1) if not (work / f"chapter_{k:02d}.flac").exists())
     done_chars = 0
     started = time.time()
@@ -419,7 +460,10 @@ def main():
         if chapter.exists():
             log(f"[{i}/{len(sections)}] {title}: already done, skipping")
             continue
-        chunks = chunk_text(apply_pronunciations(text, pron, hits))
+        spoken = apply_pronunciations(text, pron, hits)
+        if not args.no_roman_numerals:
+            spoken = expand_roman_numerals(spoken, roman_hits)
+        chunks = chunk_text(spoken)
         log(f"[{i}/{len(sections)}] {title}: {len(text)} chars, {len(chunks)} chunks")
         chapter_start = time.time()
         chunk_files = []
@@ -445,6 +489,9 @@ def main():
     if pron:
         used = ", ".join(f"{w} x{n}" for w, n in hits.most_common()) or "none"
         log(f"Pronunciations applied this run: {used}")
+
+    if roman_hits:
+        log("Roman numerals spelled out this run: " + ", ".join(f"{w} x{n}" for w, n in roman_hits.most_common()))
 
     log("Combining chapters...")
     combine(chapter_files, titles, out_path, work)

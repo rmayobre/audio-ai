@@ -241,6 +241,7 @@ Converts an epub to a chaptered `.m4b`. Resumable.
 | `--bass DB` | Low-shelf bass boost in dB (default 4). |
 | `--no-fx` | Skip the deep-voice ffmpeg processing. |
 | `--pronunciations FILE...` | One or more `.csv`, `.json`, `.py` or `.txt` files. Later files win. |
+| `--no-roman-numerals` | Do not spell out Roman numerals. By default II-XX after a name become "the Second", "the Third", ... (`Terenas Menethil II`), and after Part/Book/Chapter/Act/etc. become numbers (`Part II` -> "Part two"). Glossary entries are applied first, so a row like `Menethil II,Menethil the Second` always wins. A lone `I`, `V` or `X` is never changed. |
 | `--out FILE` | Output file, `.m4b` or `.mp3`/`.m4a`. Default: `<epub name>.m4b`. |
 | `--work DIR` | Folder for chapter files. Default: `<epub name>_chapters`. |
 | `--log FILE` | Progress log to append to. Default: `<work>/convert.log`. |
