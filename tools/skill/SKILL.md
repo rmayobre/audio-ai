@@ -1,11 +1,11 @@
 ---
-name: epub-to-kokoro-audiobook
-description: Turn an epub into a chaptered audiobook with Kokoro: find unusual names, research pronunciations using the user's book context, then run the audiobooks repo tools.
+name: bardoro
+description: Turn an epub into a chaptered audiobook with Kokoro: find unusual names, research pronunciations using the user's book context, then run the Bardoro repo tools.
 ---
 
-# Epub to Kokoro audiobook
+# Bardoro: epub to Kokoro audiobook
 
-Builds one chaptered `.m4b` from an epub through a Kokoro-FastAPI server, after fixing how invented names and unusual words are pronounced. It drives the user's `audiobooks` repository (see its `AGENTS.md`).
+Builds one chaptered `.m4b` from an epub through a Kokoro-FastAPI server, after fixing how invented names and unusual words are pronounced. It drives the user's Bardoro repository (see its `AGENTS.md`).
 
 Repo layout (relative to the repo root):
 - `tools/make-audiobook.sh EPUB SLUG [--glossary FILE]... [--list] [--url URL] [-- extra converter args]` is the two-phase wrapper. Phase 1 writes `output/SLUG/words.csv` and stops. Running it again does phase 2 and writes `output/SLUG/SLUG.m4b`.

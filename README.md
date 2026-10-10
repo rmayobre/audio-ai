@@ -1,6 +1,6 @@
-# Audio AI
+# Bardoro
 
-Turn an epub into a single, chaptered `.m4b` audiobook using your own [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI)
+A bard for your bookshelf: turn an epub into a single, chaptered `.m4b` audiobook using your own [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI)
 server, with a deep narrator voice and the names in the book pronounced correctly.
 
 Most text-to-speech stumbles on invented names (Urza, Tocasia, Kroog). This toolkit finds the words a dictionary

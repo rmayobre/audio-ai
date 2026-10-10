@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for AI coding agents (and humans) working in this repository.
+Guidance for AI coding agents (and humans) working in Bardoro, this repository.
 
 ## What this repo does
 
@@ -101,5 +101,5 @@ unless the user asks, because full runs take a long time.
 
 ## Skill
 
-`tools/skill/SKILL.md` mirrors the Claude skill `epub-to-kokoro-audiobook`. If workflow steps or flags change,
+`tools/skill/SKILL.md` mirrors the Claude skill `bardoro`. If workflow steps or flags change,
 update that file too; the user re-saves it in Claude from the new text.
