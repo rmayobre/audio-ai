@@ -1,0 +1,6 @@
+{
+  "description": "Plain am_onyx with no post-processing. Use this if the server rejects the voice blend, or to hear the raw voice.",
+  "voice": "am_onyx",
+  "speed": 1.0,
+  "fx": false
+}

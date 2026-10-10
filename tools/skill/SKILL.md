@@ -30,6 +30,7 @@ Ask with AskUserQuestion (up to four questions per call; use a second call or pl
 - Whether a series glossary already exists in `glossaries/` to reuse (list the folder and offer the match).
 
 **Settings, offering defaults** (accept "defaults"):
+- Voice profile: list them with `python tools/voice_profiles.py list` and pass `--profile NAME` to the wrapper (a profile is a JSON file in `voices/`; flags override it). Without one, the built-in defaults below apply.
 - Voice: default is the server blend `am_onyx(4)+am_adam(1)`; plain `am_onyx` if the server rejects blends.
 - Tempo: default `0.90`; `0.88` is noticeably slower. Keep the server speed at 1.0.
 - Skip the deep-voice post-processing (`--no-fx`)?

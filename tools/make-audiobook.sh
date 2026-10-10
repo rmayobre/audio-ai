@@ -10,6 +10,8 @@
 #   --url URL         Kokoro server URL (default: $KOKORO_URL)
 #   --list            only preview which sections would be read
 #   --refresh         regenerate words.csv even if it exists (overwrites it!)
+#   --profile NAME    voice profile from voices/ (see --list-profiles); flags after -- override it
+#   --list-profiles   show the available voice profiles and exit
 #
 # examples:
 #   tools/make-audiobook.sh "books/The Brothers' War - Jeff Grubb (1998).epub" brothers-war \
@@ -20,16 +22,21 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOLS="$ROOT/tools"
 
+if [ "${1:-}" = "--list-profiles" ]; then
+  [ -f "$ROOT/.venv/bin/activate" ] && source "$ROOT/.venv/bin/activate"
+  exec python "$TOOLS/voice_profiles.py" list
+fi
 if [ $# -lt 2 ]; then sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; fi
 EPUB="$1"; SLUG="$2"; shift 2
 
-URL="${KOKORO_URL:-}"; GLOSSARIES=(); LIST=0; REFRESH=0; EXTRA=()
+URL="${KOKORO_URL:-}"; GLOSSARIES=(); LIST=0; REFRESH=0; PROFILE=""; EXTRA=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --glossary) GLOSSARIES+=("$2"); shift 2 ;;
     --url)      URL="$2"; shift 2 ;;
     --list)     LIST=1; shift ;;
     --refresh)  REFRESH=1; shift ;;
+    --profile)  PROFILE="$2"; shift 2 ;;
     --)         shift; EXTRA=("$@"); break ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
@@ -77,4 +84,5 @@ exec python "$TOOLS/epub_to_kokoro.py" "$EPUB" \
   --pronunciations "${PRON[@]}" \
   --work "$OUT/chapters" \
   --out "$OUT/$SLUG.m4b" \
+  ${PROFILE:+--profile "$PROFILE"} \
   ${EXTRA[@]+"${EXTRA[@]}"}

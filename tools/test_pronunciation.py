@@ -11,7 +11,7 @@ Usage:
   python test_pronunciation.py Tocasia --pronunciations words.csv --fx    # include the deep-voice post-processing
   python test_pronunciation.py Urza --sentence "{word} drew his sword."   # custom sentence, {word} is replaced
 
-Options: --url (default $KOKORO_URL), --voice, --speed, --pitch, --tempo, --out-dir (default <repo>/output/pronunciation_tests)
+Options: --url (default $KOKORO_URL), --profile NAME, --voice, --speed, --pitch, --tempo, --bass, --no-fx, --out-dir (default <repo>/output/pronunciation_tests)
 Requires the same packages as epub_to_kokoro.py, plus a reachable Kokoro-FastAPI server.
 """
 import argparse
@@ -20,8 +20,8 @@ import re
 import sys
 from pathlib import Path
 
-from epub_to_kokoro import (DEFAULT_PITCH, DEFAULT_TEMPO, DEFAULT_VOICE, apply_pronunciations,
-                            build_filter, load_pronunciations, probe, run, synthesize)
+from epub_to_kokoro import (add_voice_args, apply_pronunciations, build_filter, load_pronunciations, probe,
+                            resolve_voice, run, synthesize)
 
 DEFAULT_SENTENCE = "The name {word} echoed through the hall."
 DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "output" / "pronunciation_tests"
@@ -36,16 +36,13 @@ def main():
     ap.add_argument("words", nargs="*", help="words to test; default: every filled-in entry of the pronunciation files")
     ap.add_argument("--pronunciations", nargs="+", default=[], metavar="FILE")
     ap.add_argument("--url", default=os.environ.get("KOKORO_URL"))
-    ap.add_argument("--voice", default=DEFAULT_VOICE)
-    ap.add_argument("--speed", type=float, default=1.0)
-    ap.add_argument("--fx", action="store_true", help="apply the deep-voice pitch/tempo/bass processing")
-    ap.add_argument("--pitch", type=float, default=DEFAULT_PITCH)
-    ap.add_argument("--tempo", type=float, default=DEFAULT_TEMPO)
+    add_voice_args(ap, opt_in_fx=True)
     ap.add_argument("--sentence", default=DEFAULT_SENTENCE)
     ap.add_argument("--max", type=int, default=20, help="limit when testing a whole file (default 20)")
     ap.add_argument("--out-dir", default=str(DEFAULT_OUT_DIR),
                     help="where the clips go (default: <repo>/output/pronunciation_tests)")
     args = ap.parse_args()
+    resolve_voice(args, fx_default=False)  # clips are plain unless --fx or a profile asks for the processing
 
     if not args.url:
         sys.exit("No server URL. Pass --url or set KOKORO_URL.")
@@ -75,7 +72,7 @@ def main():
             if args.fx:
                 sr = int(probe(raw, "stream=sample_rate", stream=True))
                 run(["ffmpeg", "-y", "-v", "error", "-i", str(raw), "-af",
-                     build_filter(sr, args.pitch, args.tempo), "-c:a", "flac", str(dest)])
+                     build_filter(sr, args.pitch, args.tempo, args.bass_db), "-c:a", "flac", str(dest)])
                 raw.unlink()
             print(f"{dest}   [{spoken}]")
 

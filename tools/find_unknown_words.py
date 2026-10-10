@@ -26,6 +26,8 @@ from bs4 import BeautifulSoup
 from ebooklib import epub, ITEM_DOCUMENT
 from spellchecker import SpellChecker
 
+from epub_to_kokoro import STRAY_RE  # watermark text such as OceanofPDF.com is not a word to check
+
 WORD_RE = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)*")
 
 
@@ -35,7 +37,7 @@ def read_text(epub_path):
     for item in book.get_items_of_type(ITEM_DOCUMENT):
         soup = BeautifulSoup(item.get_content(), "html.parser")
         parts.append(soup.get_text(" "))
-    text = " ".join(parts)
+    text = STRAY_RE.sub(" ", " ".join(parts))
     # normalise curly quotes and treat hyphens/dashes as word separators
     text = text.replace("’", "'").replace("‘", "'")
     return re.sub(r"[‐-―-]+", " ", text)

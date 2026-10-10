@@ -116,4 +116,56 @@ grep -q "^Urza,Er-zah$" "$TMP/gloss.csv" || { echo "new respelling choice was no
 [ -z "$(ls "$G"/*.flac 2>/dev/null)" ] || { echo "new clip was not moved to reviewed/"; exit 1; }
 unset AUDIO_PLAYER
 
+echo "== voice profiles"
+mkdir -p "$TMP/voices"
+cat > "$TMP/voices/test.json" <<'JSON'
+{"description": "smoke", "voice": "test_voice", "tempo": 0.8, "fx": false}
+JSON
+python "$TMP/tools/voice_profiles.py" list > "$TMP/vp.out"
+grep -q "^test: voice test_voice" "$TMP/vp.out"
+python "$TMP/tools/voice_profiles.py" new made --from test --pitch 0.9 --voice made_voice >/dev/null
+grep -q '"made_voice"' "$TMP/voices/made.json" && grep -q '"tempo": 0.8' "$TMP/voices/made.json"
+python "$TMP/tools/voice_profiles.py" new made >/dev/null 2>&1 && { echo "new must not overwrite without --force"; exit 1; } || true
+echo '{"tempoo": 1}' > "$TMP/voices/bad.json"
+python "$TMP/tools/epub_to_kokoro.py" "$EPUB" --profile bad --list >/dev/null 2>&1 && { echo "unknown profile key should fail"; exit 1; } || true
+rm "$TMP/voices/bad.json"
+CONV=(python "$TMP/tools/epub_to_kokoro.py" "$EPUB" --url "$KOKORO_URL")
+"${CONV[@]}" --profile test --work "$TMP/w2" --out "$TMP/w2.m4b" > "$TMP/p1.out"
+tail -1 "$TMP/requests.log" | grep -q '"voice": "test_voice"' || { echo "profile voice did not reach the server"; exit 1; }
+grep -q '"tempo": 0.8' "$TMP/w2/voice_settings.json" && grep -q '"fx": false' "$TMP/w2/voice_settings.json"
+"${CONV[@]}" --profile test --tempo 0.7 --work "$TMP/w2" --out "$TMP/w2.m4b" > "$TMP/p2.out"
+grep -q "WARNING: voice settings differ" "$TMP/p2.out" || { echo "changed voice settings were not flagged on a rerun"; exit 1; }
+"${CONV[@]}" --profile test --voice flag_voice --work "$TMP/w3" --out "$TMP/w3.m4b" > /dev/null
+tail -1 "$TMP/requests.log" | grep -q '"voice": "flag_voice"' || { echo "a flag should override the profile"; exit 1; }
+"$W" --list-profiles | grep -q "^test:"
+
+echo "== stray text is removed and image-only chapter titles are recovered"
+python - "$TMP" <<'EOF2'
+import sys
+from ebooklib import epub
+b = epub.EpubBook(); b.set_identifier("img"); b.set_title("Img"); b.set_language("en")
+prose = "<p>" + "He walked on through the quiet hall. " * 120 + "</p>"
+stray = '<div><p><a href="https://oceanofpdf.com"><i>OceanofPDF.com</i></a></p></div>'
+docs = [("pref.xhtml", "<p>" + "The long road home. " * 200 + "</p>" + stray),
+        ("book1.xhtml", "<h1>Book I</h1><h1>THE FIRST PART</h1><h1>(1-2 A.R.)</h1><p>An epigraph.</p>"),
+        ("c01.xhtml", '<div><img alt="7" src="x.jpg"/></div>' + prose + stray),
+        ("c02.xhtml", '<div><img alt="" src="y.jpg"/></div>' + prose)]
+items = []
+for name, body in docs:
+    c = epub.EpubHtml(title=name, file_name=name, lang="en"); c.content = body; b.add_item(c); items.append(c)
+b.toc = [epub.Link("pref.xhtml", "Preface: The Legacy", "pref")]
+b.spine = items; b.add_item(epub.EpubNcx()); b.add_item(epub.EpubNav())
+epub.write_epub(sys.argv[1] + "/imgbook.epub", b)
+EOF2
+python -I - "$TMP" <<'EOF3'
+import sys
+sys.path.insert(0, sys.argv[1] + "/tools")
+from epub_to_kokoro import extract_sections
+secs = extract_sections(sys.argv[1] + "/imgbook.epub")
+titles = [t for t, _ in secs]
+assert titles == ["Preface: The Legacy", "Book I: The First Part", "Chapter 7", "Chapter 8"], titles
+assert not any("oceanofpdf" in x.lower() for _, x in secs), "stray text left in"
+assert secs[2][1].startswith("Chapter 7.\n"), "image-only title was not spoken"
+EOF3
+
 echo "ALL OK"

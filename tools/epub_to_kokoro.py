@@ -14,6 +14,7 @@ Usage:
   python epub_to_kokoro.py book.epub
   python epub_to_kokoro.py book.epub --url http://localhost:8880 --out arthas.m4b
   python epub_to_kokoro.py book.epub --voice am_onyx --no-fx      # plain voice, no post-processing
+  python epub_to_kokoro.py book.epub --profile deep-narrator       # voice settings from voices/deep-narrator.json
   python epub_to_kokoro.py book.epub --list                       # just show which sections it would read
   python epub_to_kokoro.py book.epub --pronunciations words.csv   # respell words from a file (csv/json/py/txt)
   python epub_to_kokoro.py book.epub --pronunciations ../glossaries/series.csv words.csv   # later files win
@@ -50,16 +51,17 @@ import requests
 from bs4 import BeautifulSoup
 from ebooklib import epub
 
+# voice defaults live in voice_profiles.py (re-exported here for the other tools)
+from voice_profiles import (BASS_GAIN_DB, DEFAULT_PITCH, DEFAULT_TEMPO, DEFAULT_VOICE, add_voice_args,  # noqa: F401
+                            resolve_voice, settings_of)
+
 # ---------------------------------------------------------------- settings
-DEFAULT_VOICE = "am_onyx(4)+am_adam(1)"  # Kokoro-FastAPI weighted blend; use plain "am_onyx" if rejected
-DEFAULT_PITCH = 0.94    # <1 lowers pitch (0.94 is about -1 semitone)
-DEFAULT_TEMPO = 0.90    # final playback speed after the pitch change
-BASS_GAIN_DB = 4        # low-shelf boost around 150 Hz
 CHUNK_CHARS = 2500      # max characters per request, split at paragraph/sentence edges
 
 # Sections to read even if short (matched against the start of the section text)
 INCLUDE_RE = re.compile(
-    r"^\W*(prologue|prelude|chapter|epilogue|interlude|introduction|foreword|preface|afterword|part\s+\w+)\b",
+    r"^\W*(prologue|prelude|chapter|epilogue|interlude|introduction|foreword|preface|afterword|part\s+\w+|"
+    r"book\s+(?:[ivxlc]+|\d+|one|two|three|four|five|six|seven|eight|nine|ten))\b",
     re.I,
 )
 # Sections to skip (front/back matter)
@@ -68,6 +70,8 @@ SKIP_RE = re.compile(
     r"also by|notes|praise|title page|cover|map|glossary|discussion)\b",
     re.I,
 )
+# Text to strip from every section (watermarks and ads added by ebook sites); regular expressions, case-insensitive
+STRAY_RE = re.compile(r"\b(?:oceanofpdf(?:\.com)?)\b", re.I)
 MIN_CHARS_OTHER = 3000  # sections matching neither pattern are kept only if at least this long
 
 # Respell words the model mispronounces: {"as written": "how it should sound"}
@@ -111,17 +115,50 @@ def probe(path, entry, stream=False):
     return out.strip()
 
 
+def toc_titles(book):
+    """{file name: title} from the epub's table of contents, for sections whose title is not in their text."""
+    titles = {}
+
+    def add(node):
+        href, title = getattr(node, "href", None), getattr(node, "title", None)
+        if href and title:
+            titles.setdefault(Path(href.split("#")[0]).name, str(title).strip())
+
+    def walk(items):
+        for node in items:
+            if isinstance(node, (list, tuple)):
+                add(node[0])
+                walk(node[1] if len(node) > 1 else [])
+            else:
+                add(node)
+    walk(book.toc)
+    return titles
+
+
+def clean_stray(text):
+    """Remove watermark/ad text such as 'OceanofPDF.com'; returns '' if nothing readable is left."""
+    text = re.sub(r"\s+", " ", STRAY_RE.sub(" ", text)).strip()
+    return text if re.search(r"\w", text) else ""
+
+
 def extract_sections(epub_path):
-    """Return [(title, text)] in reading (spine) order, filtered to real story sections."""
+    """Return [(title, text)] in reading (spine) order, filtered to real story sections.
+
+    Titles come from the section's own heading. When a chapter has no heading text (its title is an image, as in
+    some publisher epubs) the title is taken from the table of contents, else from the image's alt text when that is
+    a number ("Chapter 7"), else it is numbered in order. Such a title is also spoken at the start of the section.
+    """
     book = epub.read_epub(epub_path, options={"ignore_ncx": True})
-    sections = []
+    toc = toc_titles(book)
+    sections, last_number = [], 0
     for idref, _linear in book.spine:
         item = book.get_item_with_id(idref)
         if item is None or not item.get_name().lower().endswith((".html", ".xhtml", ".htm")):
             continue
         soup = BeautifulSoup(item.get_content(), "html.parser")
-        paras = [re.sub(r"\s+", " ", p.get_text(" ", strip=True)) for p in soup.find_all(["h1", "h2", "h3", "p"])]
-        paras = [p for p in paras if p]
+        items = [(el.name, clean_stray(el.get_text(" ", strip=True))) for el in soup.find_all(["h1", "h2", "h3", "p"])]
+        items = [(tag, t) for tag, t in items if t]
+        paras = [t for _, t in items]
         text = "\n".join(paras)
         if not text:
             continue
@@ -130,7 +167,21 @@ def extract_sections(epub_path):
             continue
         if not INCLUDE_RE.match(head) and len(text) < MIN_CHARS_OTHER:
             continue
-        title = re.split(r"(?<=[.!?:])\s", paras[0], maxsplit=1)[0][:60].strip(" .") or f"Section {len(sections) + 1}"
+        if items[0][0] in ("h1", "h2", "h3"):
+            title = re.split(r"(?<=[.!?:])\s", paras[0], maxsplit=1)[0][:60].strip(" .:")
+            # "Book I" / "Part 2" followed by its own subtitle heading: keep both ("Book I: The Human Component")
+            if re.fullmatch(r"(?:book|part)\s+\S+", title, re.I) and len(items) > 1 and items[1][0] in ("h1", "h2", "h3") \
+                    and len(items[1][1]) <= 60:
+                sub_title = items[1][1].strip(" .:")
+                title = f"{title}: {sub_title.title() if sub_title.isupper() else sub_title}"
+            title = title or f"Section {len(sections) + 1}"
+        else:
+            alt = next((img.get("alt", "").strip() for img in soup.find_all("img") if img.get("alt", "").strip().isdigit()), "")
+            title = re.sub(r"[-\u2013]\(.*\)$", "", toc.get(Path(item.get_name()).name, "")).strip()
+            if not title:  # chapter number: the image's alt text, else one more than the previous chapter
+                last_number = int(alt) if alt else last_number + 1
+                title = f"Chapter {last_number}"
+            text = f"{title}.\n{text}"  # the title is not in the text, so say it
         sections.append((title.title() if title.isupper() else title, text))
     return sections
 
@@ -242,10 +293,10 @@ def r_is_voice_error(err):
     return "voice" in err.lower() and ("not found" in err.lower() or "invalid" in err.lower())
 
 
-def build_filter(sr, pitch, tempo):
+def build_filter(sr, pitch, tempo, bass_db=BASS_GAIN_DB):
     # asetrate shifts pitch (and speed by the same factor); atempo then sets the final speed.
     return (f"asetrate={int(sr * pitch)},aresample={sr},"
-            f"atempo={tempo / pitch:.5f},bass=g={BASS_GAIN_DB}:f=150")
+            f"atempo={tempo / pitch:.5f},bass=g={bass_db}:f=150")
 
 
 def concat_line(path):
@@ -292,16 +343,31 @@ def combine(chapter_files, titles, out_path, work):
     run(cmd)
 
 
+def check_voice_settings(work, settings):
+    """Remember the voice settings used for this book; warn if a rerun uses different ones, because the
+    chapters already finished would then be in a different voice from the rest."""
+    record = work / "voice_settings.json"
+    if record.exists():
+        try:
+            old = json.loads(record.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            old = {}
+        diff = {k: (old.get(k), v) for k, v in settings.items() if old.get(k) != v}
+        if diff:
+            log("WARNING: voice settings differ from the ones this book was started with: "
+                + "; ".join(f"{k} {a!r} -> {b!r}" for k, (a, b) in diff.items()))
+            log("         finished chapters keep the old voice. Delete their chapter_XX.flac files to redo them, "
+                f"or delete {record.name} to accept the new settings.")
+        return
+    record.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("epub")
     ap.add_argument("--url", default=os.environ.get("KOKORO_URL", "http://localhost:8880"),
                     help="Kokoro-FastAPI base URL (default: $KOKORO_URL, else http://localhost:8880)")
-    ap.add_argument("--voice", default=DEFAULT_VOICE)
-    ap.add_argument("--speed", type=float, default=1.0, help="server-side speed (keep near 1.0)")
-    ap.add_argument("--pitch", type=float, default=DEFAULT_PITCH)
-    ap.add_argument("--tempo", type=float, default=DEFAULT_TEMPO)
-    ap.add_argument("--no-fx", action="store_true", help="skip the deep-voice ffmpeg post-processing")
+    add_voice_args(ap)
     ap.add_argument("--out", help="output file (.m4b or .mp3/.m4a); default: <epub name>.m4b")
     ap.add_argument("--work", help="folder for chapter files; default: <epub name>_chapters")
     ap.add_argument("--list", action="store_true", help="only list the sections that would be read")
@@ -310,6 +376,7 @@ def main():
                     help="one or more files of words and how they should sound (.csv, .json, .py or .txt). "
                          "Later files override earlier ones, and all override the PRONUNCIATIONS dict in this script")
     args = ap.parse_args()
+    resolve_voice(args)
 
     pron = dict(PRONUNCIATIONS)
     for pfile in args.pronunciations:
@@ -334,9 +401,11 @@ def main():
     work.mkdir(exist_ok=True)
     global LOG_FILE
     LOG_FILE = Path(args.log) if args.log else work / "convert.log"
-    log(f"Logging to {LOG_FILE}; server {args.url}; voice {args.voice}; pitch {args.pitch} tempo {args.tempo}"
-        + (" (no fx)" if args.no_fx else ""))
-    fx = None if args.no_fx else (args.pitch, args.tempo)
+    settings = settings_of(args)
+    log(f"Logging to {LOG_FILE}; server {args.url}; profile {args.profile or '(none)'}; "
+        + ", ".join(f"{k} {v}" for k, v in settings.items()))
+    check_voice_settings(work, settings)
+    fx = (args.pitch, args.tempo, args.bass_db) if args.fx else None
     chapter_files, titles = [], []
     hits = Counter()
     todo_chars = sum(len(t) for k, (_, t) in enumerate(sections, 1) if not (work / f"chapter_{k:02d}.flac").exists())

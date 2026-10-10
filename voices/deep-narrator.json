@@ -1,0 +1,9 @@
+{
+  "description": "The default deep male narrator: an am_onyx/am_adam blend, one semitone lower, slowed slightly, with extra bass.",
+  "voice": "am_onyx(4)+am_adam(1)",
+  "speed": 1.0,
+  "pitch": 0.94,
+  "tempo": 0.90,
+  "bass_db": 4,
+  "fx": true
+}

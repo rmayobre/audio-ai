@@ -102,15 +102,81 @@ right, since blank rows are ignored.
 New pronunciations only affect chapters generated afterwards. To redo a chapter, delete its
 `output/<slug>/chapters/chapter_XX.flac` and rerun.
 
+### Maintaining one glossary for a series
+
+Books in the same universe share names, so keep **one main glossary per series** in `glossaries/` and feed each new
+book into it. New respellings are easiest to trust if they go into a small per-book *staging* glossary first, get
+reviewed by ear, and only then are merged into the main one. This is the workflow used for Magic: The Gathering
+(`magic-the-gathering.csv`, with staging glossaries such as `magic-the-gathering-bloodlines.csv`):
+
+```bash
+# 1. First book of the series: build the main glossary from its filled-in words.csv, then check it by ear
+python tools/update_glossary.py output/brothers-war/words.csv glossaries/magic-the-gathering.csv
+python tools/test_glossary.py magic-the-gathering
+python tools/review_pronunciations.py magic-the-gathering     # 1 / 2 / r; a pick of clip 1 leaves the row blank
+
+# 2. Next book: find its words. Words the main glossary already covers can stay blank in words.csv;
+#    fill in only the new names. Then save those as a staging glossary.
+tools/make-audiobook.sh "books/Bloodlines.epub" bloodlines --glossary glossaries/magic-the-gathering.csv
+python tools/update_glossary.py output/bloodlines/words.csv glossaries/magic-the-gathering-bloodlines.csv
+
+# 3. Review the staging glossary by ear (it is updated as you choose)
+python tools/test_glossary.py magic-the-gathering-bloodlines
+python tools/review_pronunciations.py magic-the-gathering-bloodlines
+
+# 4. Convert with both glossaries: main first, then the staging one
+tools/make-audiobook.sh "books/Bloodlines.epub" bloodlines \
+  --glossary glossaries/magic-the-gathering.csv \
+  --glossary glossaries/magic-the-gathering-bloodlines.csv
+
+# 5. Happy with it? Preview, then merge the staging glossary into the main one
+python tools/update_glossary.py glossaries/magic-the-gathering-bloodlines.csv glossaries/magic-the-gathering.csv --dry-run
+python tools/update_glossary.py glossaries/magic-the-gathering-bloodlines.csv glossaries/magic-the-gathering.csv
+```
+
+Repeat steps 2 to 5 for each further book. Because every staging glossary only holds words the main one lacks,
+merging several of them rarely clashes.
+
+**Which file wins** (the order matters):
+
+| Situation | Rule |
+|---|---|
+| Converting with several `--glossary` files | Later files override earlier ones, and the book's own `words.csv` is applied last of all. Put the main glossary first and the staging one after it. |
+| A blank pronunciation in a later file | Never cancels an earlier respelling. Blank means "nothing to apply", so the earlier file's entry still applies. To drop a respelling, blank or delete it in the file that contains it. |
+| `update_glossary.py SOURCE GLOSSARY` | The first file is the one being merged in and the second is the one written. Words missing from GLOSSARY are added. If both have the word with different pronunciations, GLOSSARY keeps its own and the clash is printed as a `conflict`. `--overwrite` makes SOURCE win instead. |
+| Merging several sources one after another | Without `--overwrite`, whichever is merged first wins a clash, so run each with `--dry-run` and read the conflicts. To make one source win, merge it last with `--overwrite`. |
+| A blank row already in GLOSSARY | Counts as an existing decision ("keep Kokoro's pronunciation") and is kept, even against a filled-in source entry, unless `--overwrite`. |
+
+**Known limitation:** `update_glossary.py` copies only filled-in entries from the source. If you reviewed a staging
+glossary and chose Kokoro's own pronunciation for a word (a blank row), that choice is not copied across. To record
+it in the main glossary, add the row by hand (`Karn,`), otherwise a later book that respells the word will fill it.
+
+### Voice profiles
+
+A voice profile is a small JSON file in `voices/` holding a voice and its settings. Choose one per book:
+
+```bash
+python tools/voice_profiles.py list                                              # what is available
+tools/make-audiobook.sh "books/Some Book.epub" some-book --profile deep-narrator
+python tools/voice_profiles.py new gravel --from deep-narrator --voice am_michael --pitch 0.9
+```
+
+Profiles also work with `test_pronunciation.py` and `test_glossary.py` (`--profile NAME`). Settings are chosen in this
+order: a command-line flag, then the profile, then the built-in default. Shipped profiles: `deep-narrator` (the
+default sound) and `plain-onyx` (no post-processing). See `voices/README.md` for the file format. The settings used
+for a book are saved in `output/<slug>/chapters/voice_settings.json`, and the converter warns if a rerun uses different
+ones, since finished chapters keep the old voice.
+
 ### Voice and pace
 
-Defaults: voice blend `am_onyx(4)+am_adam(1)`, pitch `0.94`, tempo `0.90`. Pass overrides to the converter after `--`:
+Defaults: voice blend `am_onyx(4)+am_adam(1)`, pitch `0.94`, tempo `0.90`, bass `4` dB. Pass overrides to the converter after `--` (they beat the profile):
 
 | Flag | Meaning |
 |---|---|
 | `--tempo 0.88` | Final speaking speed. Lower is slower; 0.88 to 0.92 is a good range. |
 | `--pitch 0.92` | Pitch shift. Lower is deeper; go in small steps. |
 | `--voice am_onyx` | Voice or blend. Use a plain voice if your server rejects blend syntax. |
+| `--bass 4` | Low-shelf bass boost in dB. |
 | `--no-fx` | Skip the ffmpeg deep-voice processing. |
 | `--speed 1.0` | Server-side speed. Leave it near 1.0 and use `--tempo` to slow things down. |
 | `--log FILE` | Where to write the progress log. Default: `output/<slug>/chapters/convert.log` (one per book, appended on reruns). |
@@ -118,10 +184,18 @@ Defaults: voice blend `am_onyx(4)+am_adam(1)`, pitch `0.94`, tempo `0.90`. Pass 
 ### Which sections are read
 
 `epub_to_kokoro.py` reads the book's reading order and keeps sections that start with Prologue, Prelude, Chapter,
-Epilogue, Interlude, Introduction, Foreword, Preface, Afterword or Part, plus any long section. It skips contents,
-copyright, dedication, acknowledgments, about the author, notes and similar. Part title pages are very short, so they
-become one-second clips. Adjust `INCLUDE_RE`, `SKIP_RE` and `MIN_CHARS_OTHER` at the top of the script to change this,
-and use `--list` to preview.
+Epilogue, Interlude, Introduction, Foreword, Preface, Afterword, Part or Book, plus any long section. It skips contents,
+copyright, dedication, acknowledgments, about the author, notes and similar. Part and Book title pages are very short,
+so they become short clips. Adjust `INCLUDE_RE`, `SKIP_RE` and `MIN_CHARS_OTHER` at the top of the script to change
+this, and use `--list` to preview.
+
+**Chapter titles.** Normally a section is titled from its own heading ("Part One: The Golden Boy"). Some epubs show
+the chapter title as an image, so the text has no heading; then the title comes from the epub's table of contents, else
+from the image's alt text when it is a number ("Chapter 7"), else it continues the numbering. These titles are also
+spoken at the start of the section.
+
+**Stray text.** Watermarks such as `OceanofPDF.com` are removed from every section before it is read, and are ignored by
+`find_unknown_words.py`. To strip another site's tag, add it to `STRAY_RE` at the top of `epub_to_kokoro.py`.
 
 ## Tools
 
@@ -133,10 +207,12 @@ Two-step wrapper: finds words on the first run, converts on the second.
 
 | Flag | Meaning |
 |---|---|
-| `--glossary FILE` | Shared pronunciations applied first. Repeatable. The book's `words.csv` always wins. |
+| `--glossary FILE` | Shared pronunciations applied first. Repeatable; later files override earlier ones and the book's `words.csv` always wins (see "Maintaining one glossary for a series"). |
 | `--url URL` | Kokoro server URL. Default: `$KOKORO_URL`. |
 | `--list` | Only preview which sections would be read. |
 | `--refresh` | Regenerate `words.csv` even if it exists (overwrites it!). |
+| `--profile NAME` | Voice profile from `voices/`. |
+| `--list-profiles` | Show the available voice profiles and exit. |
 | `-- ...` | Everything after `--` goes to `epub_to_kokoro.py`. |
 
 ### `tools/find_unknown_words.py EPUB`
@@ -157,10 +233,12 @@ Converts an epub to a chaptered `.m4b`. Resumable.
 | Flag | Meaning |
 |---|---|
 | `--url URL` | Kokoro server URL. Default: `$KOKORO_URL`, else `http://localhost:8880`. |
+| `--profile NAME` | Voice profile from `voices/` (or a path to a profile `.json`). Flags below override it. |
 | `--voice VOICE` | Voice or blend (default `am_onyx(4)+am_adam(1)`). |
 | `--speed X` | Server-side speed (default 1.0; keep near 1.0). |
 | `--pitch X` | Pitch shift (default 0.94). |
 | `--tempo X` | Final speaking speed (default 0.90). |
+| `--bass DB` | Low-shelf bass boost in dB (default 4). |
 | `--no-fx` | Skip the deep-voice ffmpeg processing. |
 | `--pronunciations FILE...` | One or more `.csv`, `.json`, `.py` or `.txt` files. Later files win. |
 | `--out FILE` | Output file, `.m4b` or `.mp3`/`.m4a`. Default: `<epub name>.m4b`. |
@@ -240,9 +318,15 @@ sox, aplay, Windows SoundPlayer), converting to wav with ffmpeg when a player ne
 | `--list-players` | Show the players found on this machine. |
 | `AUDIO_PLAYER` (env) | Force a player command, for example `AUDIO_PLAYER="mpv --no-video"`. |
 
+### `tools/voice_profiles.py {list,show,new}`
+
+Manages `voices/*.json`: `list` shows every profile, `show NAME` prints one, and `new NAME` creates one
+(`--from PROFILE`, `--description`, `--voice`, `--speed`, `--pitch`, `--tempo`, `--bass-db`, `--fx on|off`,
+`--force` to overwrite).
+
 ### `tools/update_glossary.py SOURCE GLOSSARY`
 
-Merges a book's pronunciations into a shared series glossary. Only filled-in entries are copied. Blank rows already in the glossary are kept (they mean Kokoro's own pronunciation was chosen).
+Merges a book's pronunciations, or a staging glossary, into a shared series glossary. Only filled-in entries are copied. Existing entries in the target win unless `--overwrite`, and every clash is printed. Blank rows already in the target are kept (they mean Kokoro's own pronunciation was chosen). See "Maintaining one glossary for a series" for the full ordering rules.
 
 | Flag | Meaning |
 |---|---|

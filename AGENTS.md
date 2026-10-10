@@ -23,10 +23,12 @@ tools/
   test_glossary.py         renders every glossary entry into one reviewable audio file with an index
   review_pronunciations.py plays test clips two at a time and writes the chosen result back to the glossary
   play_audio.py            cross-platform audio player (ffplay, mpv, VLC, afplay, pw-play, ...)
+  voice_profiles.py        voice profile loader/CLI (voices/*.json); shared by the converter and test scripts
   update_glossary.py       merges a book's pronunciations into a shared series glossary
   make-audiobook.sh        two-phase wrapper tying the above together
   requirements.txt         Python dependencies (ffmpeg/ffprobe come from the OS)
   skill/SKILL.md           copy of the Claude skill that drives this workflow
+voices/                    voice profiles, one JSON per voice (tracked); chosen with --profile NAME
 glossaries/                shared pronunciations per series (tracked), e.g. magic-the-gathering.csv
 books/                     source epubs (git-ignored; copyrighted)
 output/<slug>/             per book: words.csv (TRACKED), chapters/ and <slug>.m4b (git-ignored)
@@ -78,6 +80,8 @@ unless the user asks, because full runs take a long time.
   files can be given; later ones win. Replacement is whole-word, case-sensitive, longest match first.
 - **Speed vs. tempo:** keep the server `--speed` at 1.0 and use `--tempo` (ffmpeg) to slow delivery. Heavy server-side
   slowing and exaggerated voicepacks caused mispronunciations earlier.
+- **Voice settings** come from a flag, else the `--profile` JSON in `voices/`, else the built-in defaults in
+  `voice_profiles.py`. The settings used are recorded in `<work>/voice_settings.json` and a rerun with different ones warns.
 - **Voice blend syntax** (`am_onyx(4)+am_adam(1)`) is a Kokoro-FastAPI feature. If the server rejects it, fall back
   to a plain voice such as `am_onyx`.
 - CSV files are written with `\n` line endings so diffs and `sed` behave.

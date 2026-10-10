@@ -24,7 +24,7 @@ Output (default <repo>/output/pronunciation_tests/<glossary>/, which git ignores
 Entries whose pronunciation is blank in the glossary are skipped: blank means "keep Kokoro's own pronunciation".
 After listening, run review_pronunciations.py to choose the best clip for each word and update the glossary.
 
-Options: --url (default $KOKORO_URL), --voice, --speed, --no-fx, --pitch, --tempo, --sentence, --out-dir
+Options: --url (default $KOKORO_URL), --profile NAME, --voice, --speed, --no-fx, --pitch, --tempo, --bass, --sentence, --out-dir
 Requires the same packages as epub_to_kokoro.py, plus a reachable Kokoro-FastAPI server.
 """
 import argparse
@@ -34,8 +34,8 @@ import sys
 import time
 from pathlib import Path
 
-from epub_to_kokoro import (DEFAULT_PITCH, DEFAULT_TEMPO, DEFAULT_VOICE, build_filter, concat_line,
-                            fmt_secs, load_pronunciations, log, probe, run, synthesize)
+from epub_to_kokoro import (add_voice_args, build_filter, concat_line, fmt_secs, load_pronunciations, log, probe,
+                            resolve_voice, run, synthesize)
 from test_pronunciation import DEFAULT_SENTENCE, slug
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -64,11 +64,11 @@ def render_clip(text, dest, args):
         if existing.exists() and existing.stat().st_size > 0:
             return existing
     raw = dest.with_name(f".raw_{dest.name}")
-    synthesize(args.url, args.voice, args.speed, text, raw if not args.no_fx else dest, label=dest.stem)
-    if not args.no_fx:
+    synthesize(args.url, args.voice, args.speed, text, raw if args.fx else dest, label=dest.stem)
+    if args.fx:
         sr = int(probe(raw, "stream=sample_rate", stream=True))
         run(["ffmpeg", "-y", "-v", "error", "-i", str(raw), "-af",
-             build_filter(sr, args.pitch, args.tempo), "-c:a", "flac", str(dest)])
+             build_filter(sr, args.pitch, args.tempo, args.bass_db), "-c:a", "flac", str(dest)])
         raw.unlink()
     return dest
 
@@ -159,15 +159,12 @@ def main():
     ap.add_argument("--respelled-only", action="store_true", help="skip the as-written clip")
     ap.add_argument("--list", action="store_true", help="show what would be tested and exit (no server needed)")
     ap.add_argument("--url", default=os.environ.get("KOKORO_URL"))
-    ap.add_argument("--voice", default=DEFAULT_VOICE)
-    ap.add_argument("--speed", type=float, default=1.0)
-    ap.add_argument("--no-fx", action="store_true", help="skip the deep-voice processing")
-    ap.add_argument("--pitch", type=float, default=DEFAULT_PITCH)
-    ap.add_argument("--tempo", type=float, default=DEFAULT_TEMPO)
+    add_voice_args(ap)
     ap.add_argument("--sentence", default=DEFAULT_SENTENCE)
     ap.add_argument("--out-dir", default=str(DEFAULT_OUT_DIR),
                     help="where the review files go (default: <repo>/output/pronunciation_tests)")
     args = ap.parse_args()
+    resolve_voice(args)
 
     if "{word}" not in args.sentence:
         sys.exit("--sentence must contain {word}")
